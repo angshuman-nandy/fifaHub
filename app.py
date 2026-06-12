@@ -13,6 +13,16 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 APP_PASSCODE = os.environ.get("APP_PASSCODE", "")
 ALLOWED_TOOLS = {"web_search_20250305"}
 
+# Provider-agnostic LLM proxy (/api/llm) — server picks Anthropic vs OpenAI so the
+# frontend's prompts stay provider-neutral. Default preserves pre-existing behavior.
+OPENAI_URL = "https://api.openai.com/v1/responses"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1")
+OPENAI_FAST_MODEL = os.environ.get("OPENAI_FAST_MODEL", "gpt-4.1-mini")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+ANTHROPIC_FAST_MODEL = os.environ.get("ANTHROPIC_FAST_MODEL", "claude-haiku-4-5-20251001")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world"
 DEFAULT_DATES = "20260611-20260719"
 CACHE_TTL = 60  # seconds
@@ -49,7 +59,7 @@ def _stage_from_text(*texts):
     return "GS"
 
 
-def _normalize_scoreboard(data):
+def _normalize_scoreboard(data, include_upcoming=False):
     matches = []
     for ev in data.get("events", []):
         comps = ev.get("competitions") or []
@@ -58,7 +68,7 @@ def _normalize_scoreboard(data):
         comp = comps[0]
         state = (((ev.get("status") or {}).get("type") or {}).get("state")) or \
             (((comp.get("status") or {}).get("type") or {}).get("state"))
-        if state == "pre":
+        if state == "pre" and not include_upcoming:
             continue
         competitors = comp.get("competitors") or []
         home = next((c for c in competitors if c.get("homeAway") == "home"), None)
@@ -66,6 +76,29 @@ def _normalize_scoreboard(data):
         if not home or not away:
             continue
         ht, at = home.get("team") or {}, away.get("team") or {}
+
+        notes = comp.get("notes") or []
+        note_head = notes[0].get("headline") if notes else ""
+        season_slug = ((ev.get("season") or {}).get("slug")) or ""
+        stage = _stage_from_text(season_slug, note_head, ev.get("name"), ev.get("shortName"))
+
+        if state == "pre":
+            # not started yet — no score/scorers, but the espnId lets the frontend
+            # fetch lineups (Squad & Formations) once ESPN publishes them
+            matches.append({
+                "home": (ht.get("abbreviation") or "").upper(),
+                "away": (at.get("abbreviation") or "").upper(),
+                "homeName": ht.get("displayName") or "",
+                "awayName": at.get("displayName") or "",
+                "hs": None,
+                "as": None,
+                "status": "UPCOMING",
+                "stage": stage,
+                "scorers": [],
+                "espnId": str(ev.get("id") or ""),
+            })
+            continue
+
         # team.id -> abbreviation map for scorer resolution
         idmap = {}
         for c in competitors:
@@ -78,11 +111,6 @@ def _normalize_scoreboard(data):
                 return int(c.get("score"))
             except (TypeError, ValueError):
                 return 0
-
-        notes = comp.get("notes") or []
-        note_head = notes[0].get("headline") if notes else ""
-        season_slug = ((ev.get("season") or {}).get("slug")) or ""
-        stage = _stage_from_text(season_slug, note_head, ev.get("name"), ev.get("shortName"))
 
         scorers = []
         for d in comp.get("details") or []:
@@ -149,9 +177,90 @@ async def claude_proxy(request: Request):
     return JSONResponse(status_code=r.status_code, content=r.json())
 
 
+def _extract_openai_text(data):
+    """Pull concatenated assistant text out of a raw Responses API JSON payload
+    (the `output_text` convenience field is SDK-only, not in the REST response)."""
+    parts = []
+    for item in data.get("output") or []:
+        if item.get("type") == "message":
+            for c in item.get("content") or []:
+                if c.get("type") == "output_text" and c.get("text"):
+                    parts.append(c["text"])
+    return "\n".join(parts)
+
+
+async def _llm_anthropic(prompt, use_search, max_tokens, model):
+    if not API_KEY:
+        raise HTTPException(500, "Server missing ANTHROPIC_API_KEY")
+    body = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if use_search:
+        body["tools"] = [{"type": "web_search_20250305", "name": "web_search"}]
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(
+            ANTHROPIC_URL,
+            json=body,
+            headers={
+                "x-api-key": API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+        )
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, f"Anthropic API error: {r.text[:300]}")
+    data = r.json()
+    return "\n".join(b.get("text", "") for b in data.get("content") or [] if b.get("type") == "text")
+
+
+async def _llm_openai(prompt, use_search, max_tokens, model):
+    if not OPENAI_API_KEY:
+        raise HTTPException(500, "Server missing OPENAI_API_KEY")
+    body = {"model": model, "input": prompt, "max_output_tokens": max_tokens}
+    if use_search:
+        body["tools"] = [{"type": "web_search_preview"}]
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(
+            OPENAI_URL,
+            json=body,
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "content-type": "application/json"},
+        )
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, f"OpenAI API error: {r.text[:300]}")
+    data = r.json()
+    return data.get("output_text") or _extract_openai_text(data)
+
+
+@app.post("/api/llm")
+async def llm_proxy(request: Request):
+    """Provider-agnostic completion: {prompt, useSearch?, max_tokens?, tier?} -> {text, provider}.
+    Which provider runs is chosen server-side via LLM_PROVIDER (default 'anthropic'), so
+    swapping providers is a config change only — the frontend's prompts don't change.
+    tier='fast' (default 'quality') picks a cheaper/smaller model for short, low-stakes
+    write-ups (e.g. the prediction-analysis summary) without changing the prompt contract."""
+    body = await request.json()
+    prompt = body.get("prompt", "")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise HTTPException(400, "Missing prompt")
+    use_search = bool(body.get("useSearch"))
+    max_tokens = min(int(body.get("max_tokens", 1000)), 1024)
+    tier = body.get("tier") if body.get("tier") in ("fast", "quality") else "quality"
+
+    provider = LLM_PROVIDER if LLM_PROVIDER in ("anthropic", "openai") else "anthropic"
+    if provider == "openai":
+        model = OPENAI_FAST_MODEL if tier == "fast" else OPENAI_MODEL
+        text = await _llm_openai(prompt, use_search, max_tokens, model)
+    else:
+        model = ANTHROPIC_FAST_MODEL if tier == "fast" else ANTHROPIC_MODEL
+        text = await _llm_anthropic(prompt, use_search, max_tokens, model)
+    return {"text": text, "provider": provider}
+
+
 @app.get("/api/standings")
-async def standings(dates: str = DEFAULT_DATES):
-    key = f"standings:{dates}"
+async def standings(dates: str = DEFAULT_DATES, upcoming: bool = False):
+    key = f"standings:{dates}:{upcoming}"
     cached = _cache_get(key)
     if cached is not None:
         return cached
@@ -163,7 +272,7 @@ async def standings(dates: str = DEFAULT_DATES):
         data = r.json()
     except Exception:
         raise HTTPException(502, "ESPN scoreboard fetch failed")
-    matches = _normalize_scoreboard(data)
+    matches = _normalize_scoreboard(data, include_upcoming=upcoming)
     payload = {"matches": matches, "source": "espn"}
     _cache_set(key, payload)
     return payload

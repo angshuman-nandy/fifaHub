@@ -235,6 +235,7 @@ td.pts{font-weight:700;color:var(--chalk)}
 .tl{display:flex;gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--line);color:#C9DACE}
 .tl .mn{font-family:var(--mono);color:var(--muted);min-width:42px;text-align:right;flex-shrink:0}
 .bdsrc{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;margin-top:16px;border-top:1px dashed var(--line);padding-top:10px}
+.bdnote{font-family:var(--mono);font-size:11px;color:var(--gold);text-align:center;border:1px solid #4A3F1C;border-radius:8px;padding:8px 12px;margin-bottom:14px}
 
 @media(max-width:560px){
   .tab{font-size:11px;padding:10px 4px}
@@ -302,7 +303,7 @@ td.pts{font-weight:700;color:var(--chalk)}
 
 <!-- ================= TAB 3 : BREAKDOWN ================= -->
 <section class="pane" id="p-break">
-  <div class="note"><b>Pick any finished match</b> and Claude will research the full story — score, scorers, stats, turning points and the standout performer. Pull fresh standings on Tab 1 first so newly finished matches appear here.</div>
+  <div class="note"><b>Pick any finished match</b> and the AI will research the full story — score, scorers, stats, turning points and the standout performer. Pull fresh standings on Tab 1 first so newly finished matches appear here.</div>
   <div class="bar">
     <select id="bdSelect" style="flex:1;min-width:220px"></select>
     <button class="btn gold" id="bdBtn">Generate Breakdown</button>
@@ -451,6 +452,8 @@ let state={
   },
   koTeams:{},          /* kXX -> {h:'MEX', a:'RSA'} once known */
   breakdowns:{},
+  espnIds:{},          /* mid -> ESPN event id, incl. upcoming matches (for Squad & Formations) */
+  predAnalysis:null,  /* {text, fingerprint, ts} — cached AI write-up over the Monte Carlo odds */
   lastSync:'Jun 12, 2026 (seeded)'
 };
 
@@ -460,8 +463,8 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),4200)}
 
 /* persistence via artifact storage (private to you); silently falls back to in-memory */
-async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,lastSync:state.lastSync}))}catch(e){}}
-async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
+async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,lastSync:state.lastSync}))}catch(e){}}
+async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
 
 /* IST display: fixtures are US Eastern (EDT, UTC-4) for the whole Jun 11 – Jul 19 window; IST is UTC+5:30 → fixed +9:30 shift */
 const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
@@ -497,14 +500,14 @@ function bugHTML(m){
   const tag=m.stage==='GS'?`GROUP <span class="grp">${m.g}</span>`:`<span class="grp">${esc(m.label||STAGE_NAME[m.stage])}</span>`;
   let nav='';
   if(m.h&&m.a){
-    const links=[];
+    /* Squad & Formations works for upcoming/live/finished alike (lineups-only, no LLM) */
+    const links=[`<button data-nav="squad" data-mid="${m.id}">Squad &amp; Formations</button>`];
     if(st!=='FT'){ /* upcoming or live: quick prediction call (cheap, SIM-independent) */
       const p=matchProbs(m.h,m.a);
       const fav=p.pH>=p.pA?m.h:m.a, favPct=Math.round(100*Math.max(p.pH,p.pA));
       links.push(`<button class="pp" data-nav="pred" data-mid="${m.id}">Pred ${p.best[0]}–${p.best[1]} · ${fav} ${favPct}% →</button>`);
     }
     if(st==='LIVE'||st==='FT'){
-      links.unshift(`<button data-nav="squad" data-mid="${m.id}">Squad &amp; Formations</button>`);
       links.push(`<button data-nav="break" data-mid="${m.id}">Match Breakdown</button>`);
     }
     if(links.length)nav=`<div class="cardnav">${links.join('')}</div>`;
@@ -573,13 +576,15 @@ function renderStandings(){
 }
 
 /* ============ AI REFRESH (Pull Fresh Standings) ============ */
-async function callClaude(prompt,useSearch){
-  const body={model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]};
-  if(useSearch)body.tools=[{type:'web_search_20250305',name:'web_search'}];
-  const res=await fetch('/api/claude',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+/* Provider-agnostic LLM call — the server picks Anthropic vs OpenAI (LLM_PROVIDER env
+   var) and returns normalized {text}, so prompts here never depend on which is active. */
+async function callLLM(prompt,useSearch,opts){
+  opts=opts||{};
+  const body={prompt,useSearch:!!useSearch,max_tokens:opts.max_tokens||1000,tier:opts.tier||'quality'};
+  const res=await fetch('/api/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!res.ok)throw new Error('API request failed ('+res.status+')');
   const data=await res.json();
-  return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');
+  return data.text;
 }
 function extractJSON(text){
   const t=text.replace(/```json|```/g,'').trim();
@@ -606,6 +611,52 @@ function toCode(abbr,name){
   if(NAME_TO_CODE[N])return NAME_TO_CODE[N];
   return A;
 }
+/* GS team-pair -> fixture id (+ whether ESPN's home/away is flipped vs our fixture) */
+function buildGSPairIndex(){
+  const idx={};
+  GS.forEach(m=>{idx[m[4]+'|'+m[5]]={id:m[0],flip:false};idx[m[5]+'|'+m[4]]={id:m[0],flip:true}});
+  return idx;
+}
+/* tiny /api/match wrapper used by both the squad viewer and live breakdowns */
+async function fetchFacts(espnId){
+  try{
+    const r=await fetch('/api/match?event='+encodeURIComponent(espnId));
+    if(r.ok)return await r.json();
+  }catch(e){}
+  return null;
+}
+function factsHaveXI(facts){
+  return !!(facts&&((facts.home&&(facts.home.startingXI||[]).length)||(facts.away&&(facts.away.startingXI||[]).length)));
+}
+/* memoized map of mid -> ESPN event id, including upcoming matches (for Squad & Formations) */
+let _espnIdsPromise=null;
+async function ensureEspnIds(force){
+  if(!force&&_espnIdsPromise)return _espnIdsPromise;
+  _espnIdsPromise=(async()=>{
+    try{
+      const res=await fetch('/api/standings?upcoming=1');
+      if(!res.ok)throw new Error('standings '+res.status);
+      const json=await res.json();
+      if(!json.matches)return;
+      const pairIndex=buildGSPairIndex();
+      let changed=false;
+      for(const r of json.matches){
+        if(!r.espnId)continue;
+        const home=toCode(r.home,r.homeName), away=toCode(r.away,r.awayName);
+        let hit=pairIndex[home+'|'+away];
+        if(!hit&&r.stage&&r.stage!=='GS'&&TEAMS[home]&&TEAMS[away]){
+          const stage=r.stage==='BRONZE'||r.stage==='F'?'F':r.stage;
+          const slots=KO.filter(k=>k[1]===stage).map(k=>k[0]);
+          const slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===home&&kt.a===away)||(kt.h===away&&kt.a===home))});
+          if(slot)hit={id:slot};
+        }
+        if(hit&&state.espnIds[hit.id]!==r.espnId){state.espnIds[hit.id]=r.espnId;changed=true}
+      }
+      if(changed)await saveState();
+    }catch(e){/* swallow — squad falls back to "not available yet" */}
+  })();
+  return _espnIdsPromise;
+}
 async function pullFresh(){
   const btn=$('#refreshBtn');btn.disabled=true;
   btn.innerHTML='<span class="spin"></span>Pulling live results…';
@@ -622,13 +673,12 @@ async function pullFresh(){
 Respond with ONLY a JSON object, no other text, no markdown fences:
 {"matches":[{"home":"MEX","away":"RSA","hs":1,"as":0,"status":"FT","stage":"GS","scorers":["Quiñones (MEX) 9'"]}]}
 Rules: use ONLY these 3-letter codes: ${CODES}. "status" is "FT" (finished) or "LIVE". "stage" is one of GS, R32, R16, QF, SF, BRONZE, F. "scorers" lists goal scorers with team code and minute, max 6 per match. Include every finished match of the tournament so far. Keep it compact.`;
-      const text=await callClaude(prompt,true);
-      json=extractJSON(text);source='Claude';
+      const text=await callLLM(prompt,true);
+      json=extractJSON(text);source='AI';
     }
     if(!json.matches||!Array.isArray(json.matches))throw new Error('Unexpected response shape');
     let updated=0;
-    const pairIndex={};
-    GS.forEach(m=>{pairIndex[m[4]+'|'+m[5]]={id:m[0],flip:false};pairIndex[m[5]+'|'+m[4]]={id:m[0],flip:true}});
+    const pairIndex=buildGSPairIndex();
     for(const r of json.matches){
       if(typeof r.hs!=='number'||typeof r.as!=='number')continue;
       const home=toCode(r.home,r.homeName), away=toCode(r.away,r.awayName);
@@ -649,7 +699,7 @@ Rules: use ONLY these 3-letter codes: ${CODES}. "status" is "FT" (finished) or "
       }
       if(!hit)continue;
       state.results[hit.id]={hs:hit.flip?r.as:r.hs,as:hit.flip?r.hs:r.as,status:r.status==='LIVE'?'LIVE':'FT',scorers:Array.isArray(r.scorers)?r.scorers.slice(0,6):[]};
-      if(r.espnId)state.results[hit.id].espnId=r.espnId;
+      if(r.espnId){state.results[hit.id].espnId=r.espnId;state.espnIds[hit.id]=r.espnId}
       updated++;
     }
     state.lastSync=new Date().toLocaleString();
@@ -740,6 +790,12 @@ function runSims(n){
   SIM={n,title,finals,finalPair,advCount,winGrp};
 }
 function pct(x,n){return(100*x/n).toFixed(x/n>=.1?0:1)+'%'}
+/* fingerprint of confirmed results — AI prediction analysis only regenerates when this changes */
+function predFingerprint(){
+  return Object.keys(state.results).sort().map(id=>{
+    const r=state.results[id];return id+':'+r.status+':'+r.hs+'-'+r.as;
+  }).join('|');
+}
 function rationale(h,a,p){
   const dH=TEAMS[h],dA=TEAMS[a];
   const gap=dH.elo-dA.elo;
@@ -823,7 +879,47 @@ function renderPredictions(){
   <div class="koproj">Most frequent semifinal cast → <b>${sfNames.map(c=>teamFlag(c)+' '+TEAMS[c].n).join('</b> · <b>')}</b><br>
   Most likely final → <span class="f">${fpBest[0].split(' v ').map(c=>teamFlag(c)+' '+TEAMS[c].n).join('  vs  ')}</span> &nbsp;(${pct(fpBest[1],n)} of sims)<br>
   Champion call → <span class="f">🏆 ${TEAMS[top].n} (${pct(SIM.title[top],n)})</span> — re-runs automatically as real results lock in.</div>`;
+  /* AI analysis — cached against predFingerprint(); regenerated only when results change */
+  const pa=state.predAnalysis,fresh=pa&&pa.fingerprint===predFingerprint();
+  html+=`<div class="secl">AI analysis</div><div id="predAnalysis">
+    ${pa&&pa.text?`<p class="summ">${esc(pa.text)}</p>${fresh?'':'<div class="bdnote">New results since this analysis — regenerate for an up-to-date take.</div>'}<div class="bdsrc">Generated ${esc(pa.ts||'')}${fresh?' · up to date':''}</div>`:'<div class="empty">No AI analysis yet — generate a short write-up of the odds above.</div>'}
+    <div style="text-align:center;margin-top:10px"><button id="predAnalysisBtn" class="btn gold">${pa&&pa.text?(fresh?'↻ Regenerate AI Analysis':'✨ Update AI Analysis'):'✨ Generate AI Analysis'}</button></div>
+  </div>`;
   $('#predOut').innerHTML=html;
+}
+/* prompt for the cheap-tier AI write-up over the current Monte Carlo odds */
+function buildPredAnalysisPrompt(){
+  const n=SIM.n;
+  const rank=Object.keys(TEAMS).sort((x,y)=>SIM.title[y]-SIM.title[x]);
+  const top5=rank.slice(0,5).map(c=>`${TEAMS[c].n} ${pct(SIM.title[c],n)}`).join(', ');
+  const fpBest=Object.entries(SIM.finalPair).sort((a,b)=>b[1]-a[1])[0];
+  const finalists=fpBest[0].split(' v ').map(c=>TEAMS[c].n).join(' vs ');
+  const finished=Object.values(state.results).filter(r=>r.status==='FT').length;
+  const live=Object.values(state.results).filter(r=>r.status==='LIVE').length;
+  return `You are a football analyst writing a short note for a FIFA World Cup 2026 prediction dashboard, based on ${n.toLocaleString()} Monte Carlo simulations of the rest of the tournament (${finished} matches finished${live?`, ${live} live`:''} so far).
+Title odds (top 5): ${top5}.
+Most likely final: ${finalists} (${pct(fpBest[1],n)} of simulations).
+Write a punchy 3-4 sentence analysis for fans: who the model favors and why, any surprises in the numbers so far, and one thing to watch for. Plain text only, no markdown, no headings, no JSON.`;
+}
+async function genPredAnalysis(){
+  if(!SIM)return;
+  const fp=predFingerprint();
+  if(state.predAnalysis&&state.predAnalysis.fingerprint===fp&&state.predAnalysis.text){
+    toast('No new results since the last analysis');
+    return;
+  }
+  const btn=$('#predAnalysisBtn');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>Analyzing…'}
+  try{
+    const text=await callLLM(buildPredAnalysisPrompt(),false,{tier:'fast',max_tokens:300});
+    state.predAnalysis={text:text.trim(),fingerprint:fp,ts:new Date().toLocaleString()};
+    await saveState();
+    renderPredictions();
+    toast('AI analysis ready ✨');
+  }catch(e){
+    toast('Analysis failed: '+e.message,true);
+    if(btn){btn.disabled=false;btn.textContent='✨ Generate AI Analysis'}
+  }
 }
 /* prediction sim runs in a Web Worker built by stringifying the pure sim fns above (zero logic duplication) */
 let simTimer=null,predWorker=null,predBlobUrl=null,predGen=0,predUpdatedAt=null,predWorkerBroken=false;
@@ -869,7 +965,8 @@ function renderBdSelect(){
   sel.innerHTML=fin.map(m=>{const r=state.results[m.id];
     return `<option value="${m.id}">${m.d} — ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} (${m.stage==='GS'?'Group '+m.g:m.label||STAGE_NAME[m.stage]})</option>`}).join('');
 }
-function renderBreakdown(m,b){
+function renderBreakdown(m,b,opts){
+  opts=opts||{};
   const info=b.info||{};
   const meta=[m.d,esc(info.venue||'')||m.v]
     .concat(info.attendance?['👥 '+Number(info.attendance).toLocaleString('en-IN')]:[])
@@ -899,7 +996,9 @@ function renderBreakdown(m,b){
   const tlIcon={goal:'⚽',yellow:'🟨',red:'🟥',sub:'🔁'};
   const timeline=(b.events&&b.events.length)?`<div class="secl">Match timeline</div><div class="timeline">${b.events.map(ev=>`<div class="tl"><span class="mn">${esc(ev.min||'')}</span><span>${tlIcon[ev.type]||'·'}</span><span>${esc(ev.text||'')}</span></div>`).join('')}</div>`:'';
   const fromESPN=!!(b.info||hasXI('home')||hasXI('away'));
+  const hasNarrative=!!(b.summary||b.tactical||b.mvp||(b.turning_points&&b.turning_points.length));
   $('#bdOut').innerHTML=`<div class="bd">
+    ${opts.note?`<div class="bdnote">${esc(opts.note)}</div>`:''}
     <div class="secl" style="text-align:center">${meta}</div>
     <h3>${teamFlag(m.h)} ${TEAMS[m.h].n} &nbsp;vs&nbsp; ${TEAMS[m.a].n} ${teamFlag(m.a)}</h3>
     <div class="fsc">${esc(b.score||'')}</div>
@@ -911,21 +1010,32 @@ function renderBreakdown(m,b){
     ${b.turning_points&&b.turning_points.length?`<div class="secl">Turning points</div><ul>${b.turning_points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
     ${b.tactical?`<div class="secl">Tactical view</div><p class="summ">${esc(b.tactical)}</p>`:''}
     ${b.mvp?`<div class="mvp">★ Player of the match — ${esc(b.mvp)}</div>`:''}
-    ${fromESPN?'<div class="bdsrc">Lineups &amp; stats: ESPN · Analysis: Claude web research</div>':''}
+    ${fromESPN?`<div class="bdsrc">Lineups &amp; stats: ESPN${hasNarrative?' · Analysis: AI web research':''}</div>`:''}
   </div>`;
 }
 async function genBreakdown(forceId){
   const id=forceId||$('#bdSelect').value;if(!id){toast('No finished matches to break down yet',true);return}
   const m=allMatches().find(x=>x.id===id);if(!m)return;
+  const res0=state.results[id]||{};
+  if(res0.status!=='FT'){
+    /* live (or otherwise unfinished): ESPN facts only — no narrative call, nothing cached */
+    $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Fetching live lineups &amp; stats…</div>';
+    let espnId=res0.espnId;
+    if(!espnId){try{await ensureEspnIds()}catch(e){} espnId=state.espnIds[id]}
+    const facts=espnId?await fetchFacts(espnId):null;
+    if(!facts){$('#bdOut').innerHTML='<div class="empty">Live data not available yet — check back closer to kickoff.</div>';return}
+    const b=Object.assign({},facts);
+    if(res0.hs!=null)b.score=res0.hs+'-'+res0.as;
+    if((!b.scorers||!b.scorers.length)&&res0.scorers)b.scorers=res0.scorers;
+    renderBreakdown(m,b,{note:'⏱ Full analysis available at full time.'});
+    return;
+  }
   if(state.breakdowns[id]){renderBreakdown(m,state.breakdowns[id]);toast('Loaded saved breakdown');return}
   const btn=$('#bdBtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Researching…';
   $('#bdOut').innerHTML='<div class="empty">Pulling lineups &amp; stats, then researching the story…</div>';
-  const res=state.results[id]||{};
+  const res=res0;
   /* ESPN structured facts first (when we know the event id) */
-  let facts=null;
-  if(res.espnId){
-    try{const fr=await fetch('/api/match?event='+encodeURIComponent(res.espnId));if(fr.ok)facts=await fr.json()}catch(e){}
-  }
+  let facts=res.espnId?await fetchFacts(res.espnId):null;
   /* Claude narrative — grounded in ESPN facts when available, full research otherwise */
   let narrative=null,claudeErr=null;
   try{
@@ -947,7 +1057,7 @@ Respond with ONLY a JSON object, no other text or fences:
 {"score":"2-1","scorers":["Name (TEAM) 23'"],"summary":"3-4 sentence narrative of how the match unfolded, in your own words","stats":{"possession":"58% - 42%","shots":"14 - 6","shots_on_target":"6 - 2","xG":"1.9 - 0.4"},"turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)"}
 Keep everything concise and factual from the latest reports.`;
     }
-    const text=await callClaude(prompt,true);
+    const text=await callLLM(prompt,true);
     narrative=extractJSON(text);
   }catch(e){claudeErr=e}
   if(!facts&&!narrative){ /* neither source delivered — existing error UI */
@@ -977,8 +1087,7 @@ function goToPrediction(mid){
   if(el){el.scrollIntoView({behavior:'smooth',block:'center'});flashCard(el)}
   else{$('#predOut').scrollIntoView({behavior:'smooth',block:'start'});if(!SIM)schedulePredictions()}
 }
-async function goToBreakdown(mid,opts){
-  opts=opts||{};
+async function goToBreakdown(mid){
   activateTab('p-break');
   $('#bdSelect').value=mid;
   if(state.breakdowns[mid]){
@@ -987,8 +1096,25 @@ async function goToBreakdown(mid,opts){
   }else{
     await genBreakdown(mid);
   }
-  const target=opts.focus==='lineups'?(document.getElementById('bd-lineups')||$('#bdOut')):$('#bdOut');
-  if(target)target.scrollIntoView({behavior:'smooth',block:opts.focus==='lineups'&&target.id==='bd-lineups'?'center':'start'});
+  const target=$('#bdOut');
+  if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+}
+/* "Squad & Formations" — lineups-only viewer for upcoming/live/finished matches.
+   Never calls an LLM and never writes state.breakdowns, so it can't poison the
+   cached FT breakdown or trigger a narrative request for a match that isn't over. */
+async function showSquad(mid){
+  activateTab('p-break');
+  $('#bdSelect').value=mid;
+  const m=allMatches().find(x=>x.id===mid);if(!m)return;
+  $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Fetching lineups…</div>';
+  let espnId=state.results[mid]&&state.results[mid].espnId;
+  if(!espnId){try{await ensureEspnIds()}catch(e){} espnId=state.espnIds[mid]}
+  if(!espnId){$('#bdOut').innerHTML='<div class="empty">Squad not available for this match yet.</div>';return}
+  const facts=await fetchFacts(espnId);
+  if(!factsHaveXI(facts)){$('#bdOut').innerHTML='<div class="empty">Lineups not announced yet — check back about an hour before kickoff.</div>';return}
+  renderBreakdown(m,facts,{squad:true});
+  const a=document.getElementById('bd-lineups');
+  if(a)a.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
 /* ============ INIT ============ */
@@ -1005,11 +1131,14 @@ function init(){
   $('#fTeam').addEventListener('input',renderSchedule);
   $('#refreshBtn').addEventListener('click',pullFresh);
   $('#bdBtn').addEventListener('click',()=>genBreakdown());
+  $('#predOut').addEventListener('click',e=>{
+    if(e.target.id==='predAnalysisBtn')genPredAnalysis();
+  });
   $('#schedList').addEventListener('click',e=>{
     const b=e.target.closest('[data-nav]');if(!b)return;
     const mid=b.dataset.mid;
     if(b.dataset.nav==='pred')goToPrediction(mid);
-    else if(b.dataset.nav==='squad')goToBreakdown(mid,{focus:'lineups'});
+    else if(b.dataset.nav==='squad')showSquad(mid);
     else goToBreakdown(mid);
   });
   loadState().then(()=>{
