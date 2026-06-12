@@ -205,10 +205,42 @@ td.pts{font-weight:700;color:var(--chalk)}
 .subtabs{display:flex;gap:8px;margin-bottom:18px}
 .subtab{background:transparent;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.1em;padding:8px 14px;border-radius:999px;cursor:pointer;text-transform:uppercase}
 .subtab.on{border-color:var(--green);color:var(--green)}
+
+/* ---------- per-card navigation chips ---------- */
+.cardnav{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;border-top:1px dashed var(--line);padding-top:8px}
+.cardnav button{background:transparent;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:5px 10px;border-radius:999px;cursor:pointer;transition:all .15s}
+.cardnav button:hover{border-color:var(--green);color:var(--green)}
+.cardnav button.pp{color:var(--gold);border-color:#4A3F1C}
+.cardnav button.pp:hover{border-color:var(--gold);color:var(--gold)}
+.pc-flash{animation:pcflash 1.6s ease}
+@keyframes pcflash{0%,55%{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}100%{border-color:var(--line);box-shadow:none}}
+
+/* ---------- breakdown: lineups / stat bars / timeline ---------- */
+.lineups{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+.lineups h5{font-family:'Archivo Black',sans-serif;font-size:13px}
+.lineups .form{font-family:var(--mono);font-size:11px;color:var(--gold);margin:2px 0 8px}
+.xirow{display:flex;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px dashed var(--line);color:#C9DACE}
+.xirow .jn{font-family:var(--mono);color:var(--muted);min-width:20px;text-align:right;flex-shrink:0}
+.xirow .pp2{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.subsl{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
+.statcmp{margin:10px 0}
+.statrow{display:grid;grid-template-columns:64px 1fr 64px;gap:10px;align-items:center;padding:6px 0}
+.statrow .sv{font-family:var(--mono);font-size:12px;color:var(--gold)}
+.statrow .sv.ar{text-align:right}
+.slbl{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;text-align:center;margin-bottom:3px}
+.sbarw{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--panel-2)}
+.sh{background:var(--green)}
+.sa{background:var(--red)}
+.timeline{margin:10px 0}
+.tl{display:flex;gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--line);color:#C9DACE}
+.tl .mn{font-family:var(--mono);color:var(--muted);min-width:42px;text-align:right;flex-shrink:0}
+.bdsrc{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;margin-top:16px;border-top:1px dashed var(--line);padding-top:10px}
+
 @media(max-width:560px){
   .tab{font-size:11px;padding:10px 4px}
   .mgrid{grid-template-columns:1fr}
   .orow{grid-template-columns:24px 22px 1fr 52px}
+  .lineups{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -356,7 +388,7 @@ LUM:'Lumen Field · Seattle',ATT:'AT&amp;T Stadium · Dallas',NRG:'NRG Stadium �
 MBZ:'Mercedes-Benz Stadium · Atlanta',HRD:'Hard Rock Stadium · Miami',MET:'MetLife Stadium · New York/New Jersey',
 LIN:'Lincoln Financial Field · Philadelphia',GIL:'Gillette Stadium · Boston'};
 
-/* [id, date, ET time, group, home, away, venueKey] — all times US Eastern */
+/* [id, date, ET time, group, home, away, venueKey] — source data US Eastern; displayed in IST via fmtIST() */
 const GS=[
 ['m01','Jun 11','3:00 PM','A','MEX','RSA','AZT'],['m02','Jun 11','10:00 PM','A','KOR','CZE','AKR'],
 ['m03','Jun 12','3:00 PM','B','CAN','BIH','BMO'],['m04','Jun 12','9:00 PM','D','USA','PAR','SOF'],
@@ -431,9 +463,26 @@ function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast
 async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,lastSync:state.lastSync}))}catch(e){}}
 async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
 
+/* IST display: fixtures are US Eastern (EDT, UTC-4) for the whole Jun 11 – Jul 19 window; IST is UTC+5:30 → fixed +9:30 shift */
+const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+const _istCache={};
+function fmtIST(dateStr,timeStr){
+  const key=dateStr+'|'+timeStr;
+  if(_istCache[key])return _istCache[key];
+  const dm=String(dateStr).match(/([A-Za-z]+)\s+(\d+)/), tm=String(timeStr).match(/(\d+):(\d+)\s*(AM|PM)(\s*\+1)?/i);
+  if(!dm||!tm||MONTHS[dm[1]]==null)return{date:dateStr,time:timeStr};
+  let h=+tm[1]%12;if(/pm/i.test(tm[3]))h+=12;
+  const dt=new Date(Date.UTC(2026,MONTHS[dm[1]],+dm[2]+(tm[4]?1:0),h+4,+tm[2]));
+  const out={
+    date:dt.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',month:'short',day:'numeric'}),
+    time:dt.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'numeric',minute:'2-digit',hour12:true})
+  };
+  _istCache[key]=out;
+  return out;
+}
 function allMatches(){
-  const g=GS.map(m=>({id:m[0],stage:'GS',d:m[1],t:m[2],g:m[3],h:m[4],a:m[5],v:VEN[m[6]]}));
-  const k=KO.map(m=>{const kt=state.koTeams[m[0]]||{};return{id:m[0],stage:m[1],d:m[2],t:m[3],g:null,h:kt.h||null,a:kt.a||null,v:VEN[m[4]],label:KO_LABEL[m[0]]||STAGE_NAME[m[1]]}});
+  const g=GS.map(m=>{const i=fmtIST(m[1],m[2]);return{id:m[0],stage:'GS',d:i.date,t:i.time,rawD:m[1],g:m[3],h:m[4],a:m[5],v:VEN[m[6]]}});
+  const k=KO.map(m=>{const kt=state.koTeams[m[0]]||{};const i=fmtIST(m[2],m[3]);return{id:m[0],stage:m[1],d:i.date,t:i.time,rawD:m[2],g:null,h:kt.h||null,a:kt.a||null,v:VEN[m[4]],label:KO_LABEL[m[0]]||STAGE_NAME[m[1]]}});
   return g.concat(k);
 }
 const teamName=c=>TEAMS[c]?TEAMS[c].n:(c||'TBD');
@@ -446,12 +495,27 @@ function bugHTML(m){
   const st=r?(r.status||'FT'):'';
   const hw=r&&st==='FT'&&hs>as, aw=r&&st==='FT'&&as>hs;
   const tag=m.stage==='GS'?`GROUP <span class="grp">${m.g}</span>`:`<span class="grp">${esc(m.label||STAGE_NAME[m.stage])}</span>`;
+  let nav='';
+  if(m.h&&m.a){
+    const links=[];
+    if(st!=='FT'){ /* upcoming or live: quick prediction call (cheap, SIM-independent) */
+      const p=matchProbs(m.h,m.a);
+      const fav=p.pH>=p.pA?m.h:m.a, favPct=Math.round(100*Math.max(p.pH,p.pA));
+      links.push(`<button class="pp" data-nav="pred" data-mid="${m.id}">Pred ${p.best[0]}–${p.best[1]} · ${fav} ${favPct}% →</button>`);
+    }
+    if(st==='LIVE'||st==='FT'){
+      links.unshift(`<button data-nav="squad" data-mid="${m.id}">Squad &amp; Formations</button>`);
+      links.push(`<button data-nav="break" data-mid="${m.id}">Match Breakdown</button>`);
+    }
+    if(links.length)nav=`<div class="cardnav">${links.join('')}</div>`;
+  }
   return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}">
-    <div class="meta"><span>${tag}</span><span>${esc(m.d)} · ${esc(m.t)} ET</span><span class="st-${st}">${st==='LIVE'?'● LIVE':st}</span></div>
+    <div class="meta"><span>${tag}</span><span>${esc(m.d)} · ${esc(m.t)} IST</span><span class="st-${st}">${st==='LIVE'?'● LIVE':st}</span></div>
     <div class="row ${hw?'w':''}"><span class="fl">${teamFlag(m.h)}</span><span class="tn">${m.h?TEAMS[m.h].n:'To be decided'}<small>${m.h||''}</small></span><span class="sc">${hs??'–'}</span></div>
     <div class="row ${aw?'w':''}"><span class="fl">${teamFlag(m.a)}</span><span class="tn">${m.a?TEAMS[m.a].n:'To be decided'}<small>${m.a||''}</small></span><span class="sc">${as??'–'}</span></div>
     ${r&&r.scorers&&r.scorers.length?`<div class="scorers">${r.scorers.map(esc).join(' · ')}</div>`:''}
     <div class="venue">📍 ${m.v}</div>
+    ${nav}
   </div>`;
 }
 function renderSchedule(){
@@ -524,47 +588,79 @@ function extractJSON(text){
   return JSON.parse(t.slice(i,j+1));
 }
 const CODES=Object.keys(TEAMS).join(', ');
+/* ESPN-first standings fetch (server-side proxy at /api/standings dodges CORS) */
+async function fetchStandingsESPN(){
+  const res=await fetch('/api/standings');
+  if(!res.ok)throw new Error('ESPN endpoint '+res.status);
+  return res.json();
+}
+/* resolve ESPN abbreviations / display names onto the app's TEAMS codes */
+const TEAM_ALIASES={'TURKEY':'TUR','TÜRKIYE':'TUR','SOUTH KOREA':'KOR','KOREA REPUBLIC':'KOR','CZECH REPUBLIC':'CZE','CZECHIA':'CZE','UNITED STATES':'USA','IR IRAN':'IRN','IRAN':'IRN','BOSNIA AND HERZEGOVINA':'BIH','BOSNIA & HERZEGOVINA':'BIH','CAPE VERDE':'CPV','CABO VERDE':'CPV','IVORY COAST':'CIV',"CÔTE D'IVOIRE":'CIV','DR CONGO':'COD','CONGO DR':'COD','NEW ZEALAND':'NZL','SAUDI ARABIA':'KSA','SOUTH AFRICA':'RSA'};
+const NAME_TO_CODE={};Object.keys(TEAMS).forEach(c=>NAME_TO_CODE[TEAMS[c].n.replace(/&amp;/g,'&').toUpperCase()]=c);
+function toCode(abbr,name){
+  const A=(abbr||'').toUpperCase().trim();
+  if(TEAMS[A])return A;
+  if(TEAM_ALIASES[A])return TEAM_ALIASES[A];
+  const N=(name||'').toUpperCase().trim();
+  if(TEAM_ALIASES[N])return TEAM_ALIASES[N];
+  if(NAME_TO_CODE[N])return NAME_TO_CODE[N];
+  return A;
+}
 async function pullFresh(){
   const btn=$('#refreshBtn');btn.disabled=true;
-  btn.innerHTML='<span class="spin"></span>Searching live results…';
+  btn.innerHTML='<span class="spin"></span>Pulling live results…';
   try{
-    const today=new Date().toDateString();
-    const prompt=`Today is ${today}. Search the web for the latest FIFA World Cup 2026 results (tournament runs Jun 11 - Jul 19, 2026 in USA/Mexico/Canada). Find ALL matches that have FINISHED or are LIVE so far, focusing on the most recent days.
+    let json,source;
+    try{
+      json=await fetchStandingsESPN();source='ESPN';
+      if(!json.matches||!json.matches.length)throw new Error('ESPN returned no matches');
+    }catch(espnErr){
+      /* fall back to Claude web search */
+      btn.innerHTML='<span class="spin"></span>Searching live results…';
+      const today=new Date().toDateString();
+      const prompt=`Today is ${today}. Search the web for the latest FIFA World Cup 2026 results (tournament runs Jun 11 - Jul 19, 2026 in USA/Mexico/Canada). Find ALL matches that have FINISHED or are LIVE so far, focusing on the most recent days.
 Respond with ONLY a JSON object, no other text, no markdown fences:
 {"matches":[{"home":"MEX","away":"RSA","hs":1,"as":0,"status":"FT","stage":"GS","scorers":["Quiñones (MEX) 9'"]}]}
 Rules: use ONLY these 3-letter codes: ${CODES}. "status" is "FT" (finished) or "LIVE". "stage" is one of GS, R32, R16, QF, SF, BRONZE, F. "scorers" lists goal scorers with team code and minute, max 6 per match. Include every finished match of the tournament so far. Keep it compact.`;
-    const text=await callClaude(prompt,true);
-    const json=extractJSON(text);
+      const text=await callClaude(prompt,true);
+      json=extractJSON(text);source='Claude';
+    }
     if(!json.matches||!Array.isArray(json.matches))throw new Error('Unexpected response shape');
     let updated=0;
     const pairIndex={};
     GS.forEach(m=>{pairIndex[m[4]+'|'+m[5]]={id:m[0],flip:false};pairIndex[m[5]+'|'+m[4]]={id:m[0],flip:true}});
     for(const r of json.matches){
       if(typeof r.hs!=='number'||typeof r.as!=='number')continue;
-      let hit=pairIndex[(r.home||'')+'|'+(r.away||'')];
-      if(!hit&&r.stage&&r.stage!=='GS'&&TEAMS[r.home]&&TEAMS[r.away]){
+      const home=toCode(r.home,r.homeName), away=toCode(r.away,r.awayName);
+      let hit=pairIndex[home+'|'+away];
+      if(!hit&&r.stage&&r.stage!=='GS'&&TEAMS[home]&&TEAMS[away]){
         /* knockout match: find its slot (existing pairing, or first open slot in that stage) */
         const stage=r.stage==='BRONZE'||r.stage==='F'?'F':r.stage;
         const slots=KO.filter(k=>k[1]===stage).map(k=>k[0]);
-        let slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===r.home&&kt.a===r.away)||(kt.h===r.away&&kt.a===r.home))});
+        let slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===home&&kt.a===away)||(kt.h===away&&kt.a===home))});
         if(!slot)slot=slots.find(id=>!state.koTeams[id]);
         if(r.stage==='BRONZE')slot='k31';if(r.stage==='F')slot='k32';
         if(slot){
           const kt=state.koTeams[slot];
-          const flip=kt&&kt.h===r.away;
-          if(!kt)state.koTeams[slot]={h:r.home,a:r.away};
+          const flip=kt&&kt.h===away;
+          if(!kt)state.koTeams[slot]={h:home,a:away};
           hit={id:slot,flip:!!flip};
         }
       }
       if(!hit)continue;
       state.results[hit.id]={hs:hit.flip?r.as:r.hs,as:hit.flip?r.hs:r.as,status:r.status==='LIVE'?'LIVE':'FT',scorers:Array.isArray(r.scorers)?r.scorers.slice(0,6):[]};
+      if(r.espnId)state.results[hit.id].espnId=r.espnId;
       updated++;
     }
     state.lastSync=new Date().toLocaleString();
     $('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
     await saveState();
-    renderSchedule();renderStandings();renderBdSelect();schedulePredictions();
-    toast(updated?('Updated '+updated+' match'+(updated>1?'es':'')+' with fresh scores ⚽'):'No new finished matches found yet');
+    /* scoreboard fresh + interactive first; predictions recompute async in a Worker */
+    renderSchedule();renderStandings();renderBdSelect();
+    toast(updated?('Updated '+updated+' match'+(updated>1?'es':'')+' via '+source+' ⚽'):'No new finished matches found yet');
+    btn.disabled=false;btn.innerHTML='⟳ Pull Fresh Standings';
+    schedulePredictions();
+    return;
   }catch(e){
     toast('Could not refresh: '+e.message+' — try again in a moment',true);
   }
@@ -665,6 +761,7 @@ function renderPredictions(){
     <div class="lbl">🏆 PROJECTED CHAMPION · ${n.toLocaleString()} SIMULATIONS</div>
     <div class="big">${teamFlag(top)} ${TEAMS[top].n}</div>
     <div class="pct">wins it all in ${pct(SIM.title[top],n)} of simulated tournaments · most likely final: <b style="color:var(--gold)">${fpBest[0].split(' v ').map(c=>teamFlag(c)+' '+TEAMS[c].n).join(' vs ')}</b> (${pct(fpBest[1],n)})</div>
+    ${predUpdatedAt?`<div class="pct" style="margin-top:6px;font-size:11px">Predictions updated ${predUpdatedAt.toLocaleTimeString()} · ${n.toLocaleString()} simulations</div>`:''}
   </div>
   <div class="secl">Title odds — top 12</div><div class="odds">`;
   const mx=SIM.title[top]/n;
@@ -683,13 +780,13 @@ function renderPredictions(){
     for(const m of GS.filter(m=>m[3]===g)){
       const r=state.results[m[0]];
       if(r&&r.status==='FT'){
-        html+=`<div class="pcard"><div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} ${r.hs}–${r.as} ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely" style="color:var(--green)">FINAL — locked into the model</span></div></div>`;
+        html+=`<div class="pcard" id="pc-${m[0]}"><div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} ${r.hs}–${r.as} ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely" style="color:var(--green)">FINAL — locked into the model</span></div></div>`;
         continue;
       }
       const p=matchProbs(m[4],m[5]);
       const w=x=>Math.round(100*x);
-      html+=`<div class="pcard">
-      <div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} vs ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely">most likely: ${p.best[0]}–${p.best[1]} · ${m[1]}</span></div>
+      html+=`<div class="pcard" id="pc-${m[0]}">
+      <div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} vs ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely">most likely: ${p.best[0]}–${p.best[1]} · ${fmtIST(m[1],m[2]).date}</span></div>
       <div class="probbar">
         <div class="p1" style="width:${w(p.pH)}%">${m[4]} ${w(p.pH)}%</div>
         <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
@@ -699,6 +796,28 @@ function renderPredictions(){
     }
     html+='</div>';
   }
+  /* knockout match calls — only fixtures whose pairings are known (state.koTeams) */
+  const koms=allMatches().filter(m=>m.stage!=='GS'&&m.h&&m.a);
+  if(koms.length){
+    html+='<div class="secl">Knockout match calls</div>';
+    for(const m of koms){
+      const r=state.results[m.id];
+      if(r&&r.status==='FT'){
+        html+=`<div class="pcard" id="pc-${m.id}"><div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely" style="color:var(--green)">${esc(m.label||STAGE_NAME[m.stage])} · FINAL</span></div></div>`;
+        continue;
+      }
+      const p=matchProbs(m.h,m.a);
+      const w=x=>Math.round(100*x);
+      html+=`<div class="pcard" id="pc-${m.id}">
+      <div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely">${esc(m.label||STAGE_NAME[m.stage])} · most likely: ${p.best[0]}–${p.best[1]} · ${m.d}</span></div>
+      <div class="probbar">
+        <div class="p1" style="width:${w(p.pH)}%">${m.h} ${w(p.pH)}%</div>
+        <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
+        <div class="p2" style="width:${w(p.pA)}%">${m.a} ${w(p.pA)}%</div>
+      </div>
+      <div class="rat">${rationale(m.h,m.a,p)}</div></div>`;
+    }
+  }
   const sfNames=rank.slice(0,4);
   html+=`<div class="secl">Projected road to MetLife — July 19</div>
   <div class="koproj">Most frequent semifinal cast → <b>${sfNames.map(c=>teamFlag(c)+' '+TEAMS[c].n).join('</b> · <b>')}</b><br>
@@ -706,11 +825,40 @@ function renderPredictions(){
   Champion call → <span class="f">🏆 ${TEAMS[top].n} (${pct(SIM.title[top],n)})</span> — re-runs automatically as real results lock in.</div>`;
   $('#predOut').innerHTML=html;
 }
-let simTimer=null;
+/* prediction sim runs in a Web Worker built by stringifying the pure sim fns above (zero logic duplication) */
+let simTimer=null,predWorker=null,predBlobUrl=null,predGen=0,predUpdatedAt=null,predWorkerBroken=false;
+function ensurePredWorker(){
+  if(predWorker)return predWorker;
+  if(predWorkerBroken||typeof Worker==='undefined')return null;
+  try{
+    const eloMap={};Object.keys(TEAMS).forEach(c=>eloMap[c]={elo:TEAMS[c].elo});
+    const src='const TEAMS='+JSON.stringify(eloMap)+';\nconst GS='+JSON.stringify(GS)+';\nlet state={};\nlet SIM=null;\n'+
+      [pois,lambdas,samplePois,matchProbs,simulateOnce,runSims].map(f=>f.toString()).join('\n')+
+      '\nonmessage=e=>{state.results=e.data.results;runSims(e.data.n);postMessage({gen:e.data.gen,SIM});};';
+    predBlobUrl=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    predWorker=new Worker(predBlobUrl);
+    predWorker.onmessage=e=>{
+      if(e.data.gen!==predGen)return; /* stale job — a newer pull superseded it */
+      SIM=e.data.SIM;predUpdatedAt=new Date();renderPredictions();
+    };
+    predWorker.onerror=()=>{
+      try{predWorker.terminate()}catch(_){}
+      predWorker=null;predWorkerBroken=true;
+      schedulePredictionsInline(); /* recover on the main thread */
+    };
+  }catch(e){predWorker=null;predWorkerBroken=true}
+  return predWorker;
+}
+function schedulePredictionsInline(){
+  clearTimeout(simTimer);
+  simTimer=setTimeout(()=>{runSims(3000);predUpdatedAt=new Date();renderPredictions()},60);
+}
 function schedulePredictions(){
   $('#predOut').innerHTML='<div class="empty">Crunching 3,000 tournaments…</div>';
-  clearTimeout(simTimer);
-  simTimer=setTimeout(()=>{runSims(3000);renderPredictions()},60);
+  predGen++;
+  const w=ensurePredWorker();
+  if(!w){schedulePredictionsInline();return}
+  w.postMessage({results:state.results,n:3000,gen:predGen});
 }
 
 /* ============ TAB 3: MATCH BREAKDOWN ============ */
@@ -722,49 +870,132 @@ function renderBdSelect(){
     return `<option value="${m.id}">${m.d} — ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} (${m.stage==='GS'?'Group '+m.g:m.label||STAGE_NAME[m.stage]})</option>`}).join('');
 }
 function renderBreakdown(m,b){
-  const stats=b.stats||{};
+  const info=b.info||{};
+  const meta=[m.d,esc(info.venue||'')||m.v]
+    .concat(info.attendance?['👥 '+Number(info.attendance).toLocaleString('en-IN')]:[])
+    .concat(info.referee?['Ref: '+esc(info.referee)]:[]).filter(Boolean).join(' · ');
+  /* lineups (ESPN facts) — anchor target for "Squad & Formations" card links */
+  const hasXI=s=>b[s]&&b[s].startingXI&&b[s].startingXI.length;
+  const lineups=(hasXI('home')||hasXI('away'))?`
+    <div class="secl" id="bd-lineups">Lineups &amp; formations</div>
+    <div class="lineups">${['home','away'].map(s=>{
+      const t=b[s];if(!t)return'<div></div>';
+      return `<div><h5>${esc(t.teamName||teamName(s==='home'?m.h:m.a))}</h5>
+      ${t.formation?`<div class="form">${esc(t.formation)}</div>`:''}
+      ${(t.startingXI||[]).map(p=>`<div class="xirow"><span class="jn">${esc(p.jersey||'')}</span><span>${esc(p.name)}</span><span class="pp2">${esc(p.pos||'')}</span></div>`).join('')}
+      ${t.subs&&t.subs.length?`<div class="subsl"><b>Subs:</b> ${t.subs.map(p=>esc(p.name)).join(', ')}</div>`:''}</div>`}).join('')}
+    </div>`:'';
+  /* stats: ESPN array shape gets comparison bars; legacy Claude object shape keeps the statgrid */
+  let statsHTML='';
+  if(Array.isArray(b.stats)&&b.stats.length){
+    statsHTML='<div class="secl">Team stats</div><div class="statcmp">'+b.stats.map(s=>{
+      const hn=parseFloat(s.home),an=parseFloat(s.away);
+      let hw=50;if(isFinite(hn)&&isFinite(an)&&(hn+an)>0)hw=100*hn/(hn+an);
+      return `<div class="statrow"><span class="sv">${esc(s.home??'–')}</span><div><div class="slbl">${esc(s.label)}</div><div class="sbarw"><div class="sh" style="width:${hw}%"></div><div class="sa" style="width:${100-hw}%"></div></div></div><span class="sv ar">${esc(s.away??'–')}</span></div>`;
+    }).join('')+'</div>';
+  }else if(b.stats&&typeof b.stats==='object'&&Object.keys(b.stats).length){
+    statsHTML=`<div class="statgrid">${Object.entries(b.stats).map(([k,v])=>`<div class="stat"><div class="v">${esc(v)}</div><div class="k">${esc(k.replace(/_/g,' '))}</div></div>`).join('')}</div>`;
+  }
+  const tlIcon={goal:'⚽',yellow:'🟨',red:'🟥',sub:'🔁'};
+  const timeline=(b.events&&b.events.length)?`<div class="secl">Match timeline</div><div class="timeline">${b.events.map(ev=>`<div class="tl"><span class="mn">${esc(ev.min||'')}</span><span>${tlIcon[ev.type]||'·'}</span><span>${esc(ev.text||'')}</span></div>`).join('')}</div>`:'';
+  const fromESPN=!!(b.info||hasXI('home')||hasXI('away'));
   $('#bdOut').innerHTML=`<div class="bd">
-    <div class="secl" style="text-align:center">${m.d} · ${m.v}</div>
+    <div class="secl" style="text-align:center">${meta}</div>
     <h3>${teamFlag(m.h)} ${TEAMS[m.h].n} &nbsp;vs&nbsp; ${TEAMS[m.a].n} ${teamFlag(m.a)}</h3>
     <div class="fsc">${esc(b.score||'')}</div>
     ${b.scorers&&b.scorers.length?`<div class="gl" style="text-align:center">⚽ ${b.scorers.map(esc).join('<br>⚽ ')}</div>`:''}
-    <p class="summ">${esc(b.summary||'')}</p>
-    <div class="statgrid">${Object.entries(stats).map(([k,v])=>`<div class="stat"><div class="v">${esc(v)}</div><div class="k">${esc(k.replace(/_/g,' '))}</div></div>`).join('')}</div>
+    ${b.summary?`<p class="summ">${esc(b.summary)}</p>`:''}
+    ${lineups}
+    ${statsHTML}
+    ${timeline}
     ${b.turning_points&&b.turning_points.length?`<div class="secl">Turning points</div><ul>${b.turning_points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
+    ${b.tactical?`<div class="secl">Tactical view</div><p class="summ">${esc(b.tactical)}</p>`:''}
     ${b.mvp?`<div class="mvp">★ Player of the match — ${esc(b.mvp)}</div>`:''}
+    ${fromESPN?'<div class="bdsrc">Lineups &amp; stats: ESPN · Analysis: Claude web research</div>':''}
   </div>`;
 }
-async function genBreakdown(){
-  const id=$('#bdSelect').value;if(!id){toast('No finished matches to break down yet',true);return}
-  const m=allMatches().find(x=>x.id===id);
+async function genBreakdown(forceId){
+  const id=forceId||$('#bdSelect').value;if(!id){toast('No finished matches to break down yet',true);return}
+  const m=allMatches().find(x=>x.id===id);if(!m)return;
   if(state.breakdowns[id]){renderBreakdown(m,state.breakdowns[id]);toast('Loaded saved breakdown');return}
   const btn=$('#bdBtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Researching…';
-  $('#bdOut').innerHTML='<div class="empty">Claude is searching match reports, stats and reactions…</div>';
+  $('#bdOut').innerHTML='<div class="empty">Pulling lineups &amp; stats, then researching the story…</div>';
+  const res=state.results[id]||{};
+  /* ESPN structured facts first (when we know the event id) */
+  let facts=null;
+  if(res.espnId){
+    try{const fr=await fetch('/api/match?event='+encodeURIComponent(res.espnId));if(fr.ok)facts=await fr.json()}catch(e){}
+  }
+  /* Claude narrative — grounded in ESPN facts when available, full research otherwise */
+  let narrative=null,claudeErr=null;
   try{
-    const prompt=`Search the web for the full match report of the FIFA World Cup 2026 game: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n}, played ${m.d} 2026 (${m.stage==='GS'?'Group '+m.g:STAGE_NAME[m.stage]}) at ${m.v.replace(/&amp;/g,'&')}.
+    let prompt;
+    const where=(m.stage==='GS'?'Group '+m.g:STAGE_NAME[m.stage])+', played '+m.rawD+' 2026 at '+m.v.replace(/&amp;/g,'&');
+    if(facts){
+      const ground={score:(res.hs!=null?res.hs+'-'+res.as:''),scorers:facts.scorers&&facts.scorers.length?facts.scorers:(res.scorers||[]),
+        home:facts.home&&{team:facts.home.teamName,formation:facts.home.formation,startingXI:(facts.home.startingXI||[]).map(p=>p.name)},
+        away:facts.away&&{team:facts.away.teamName,formation:facts.away.formation,startingXI:(facts.away.startingXI||[]).map(p=>p.name)},
+        stats:facts.stats};
+      prompt=`Here are verified facts for the FIFA World Cup 2026 match ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}):
+${JSON.stringify(ground)}
+Search the web for reactions and context, then respond with ONLY a JSON object, no other text or fences:
+{"summary":"3-4 sentence narrative of how the match unfolded, in your own words","turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)","tactical":"2-3 sentences on the tactical battle — formations, pressing, key matchups"}
+Keep it concise and consistent with the facts above.`;
+    }else{
+      prompt=`Search the web for the full match report of the FIFA World Cup 2026 game: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}).
 Respond with ONLY a JSON object, no other text or fences:
 {"score":"2-1","scorers":["Name (TEAM) 23'"],"summary":"3-4 sentence narrative of how the match unfolded, in your own words","stats":{"possession":"58% - 42%","shots":"14 - 6","shots_on_target":"6 - 2","xG":"1.9 - 0.4"},"turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)"}
 Keep everything concise and factual from the latest reports.`;
+    }
     const text=await callClaude(prompt,true);
-    const b=extractJSON(text);
-    state.breakdowns[id]=b;await saveState();
-    renderBreakdown(m,b);
-    toast('Breakdown ready 📋');
-  }catch(e){
-    $('#bdOut').innerHTML='<div class="empty">Couldn\'t complete the research — '+esc(e.message)+'.<br>Give it another try.</div>';
-    toast('Breakdown failed: '+e.message,true);
+    narrative=extractJSON(text);
+  }catch(e){claudeErr=e}
+  if(!facts&&!narrative){ /* neither source delivered — existing error UI */
+    $('#bdOut').innerHTML='<div class="empty">Couldn\'t complete the research — '+esc(claudeErr?claudeErr.message:'no data')+'.<br>Give it another try.</div>';
+    toast('Breakdown failed: '+(claudeErr?claudeErr.message:'no data'),true);
+    btn.disabled=false;btn.textContent='Generate Breakdown';
+    return;
   }
+  const b=Object.assign({},facts||{},narrative||{});
+  if(!b.score&&res.hs!=null)b.score=res.hs+'-'+res.as;
+  if((!b.scorers||!b.scorers.length)&&res.scorers)b.scorers=res.scorers;
+  state.breakdowns[id]=b;await saveState();
+  renderBreakdown(m,b);
+  toast(narrative?'Breakdown ready 📋':'Facts loaded — narrative unavailable right now');
   btn.disabled=false;btn.textContent='Generate Breakdown';
+}
+
+/* ============ CARD NAVIGATION ============ */
+function activateTab(paneId){
+  $$('.tab').forEach(x=>x.classList.toggle('on',x.dataset.pane===paneId));
+  $$('.pane').forEach(p=>p.classList.toggle('on',p.id===paneId));
+}
+function flashCard(el){el.classList.remove('pc-flash');void el.offsetWidth;el.classList.add('pc-flash');setTimeout(()=>el.classList.remove('pc-flash'),1700)}
+function goToPrediction(mid){
+  activateTab('p-pred');
+  const el=document.getElementById('pc-'+mid);
+  if(el){el.scrollIntoView({behavior:'smooth',block:'center'});flashCard(el)}
+  else{$('#predOut').scrollIntoView({behavior:'smooth',block:'start'});if(!SIM)schedulePredictions()}
+}
+async function goToBreakdown(mid,opts){
+  opts=opts||{};
+  activateTab('p-break');
+  $('#bdSelect').value=mid;
+  if(state.breakdowns[mid]){
+    const m=allMatches().find(x=>x.id===mid);
+    if(m)renderBreakdown(m,state.breakdowns[mid]);
+  }else{
+    await genBreakdown(mid);
+  }
+  const target=opts.focus==='lineups'?(document.getElementById('bd-lineups')||$('#bdOut')):$('#bdOut');
+  if(target)target.scrollIntoView({behavior:'smooth',block:opts.focus==='lineups'&&target.id==='bd-lineups'?'center':'start'});
 }
 
 /* ============ INIT ============ */
 function init(){
   const gsel=$('#fGroup');
   for(const g of 'ABCDEFGHIJKL'){const o=document.createElement('option');o.value=g;o.textContent='Group '+g;gsel.appendChild(o)}
-  $$('.tab').forEach(t=>t.addEventListener('click',()=>{
-    $$('.tab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
-    $$('.pane').forEach(p=>p.classList.toggle('on',p.id===t.dataset.pane));
-  }));
+  $$('.tab').forEach(t=>t.addEventListener('click',()=>activateTab(t.dataset.pane)));
   $$('.subtab').forEach(t=>t.addEventListener('click',()=>{
     $$('.subtab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
     $('#view-fixtures').style.display=t.dataset.view==='fixtures'?'':'none';
@@ -773,7 +1004,14 @@ function init(){
   ['fStage','fGroup'].forEach(i=>$('#'+i).addEventListener('change',renderSchedule));
   $('#fTeam').addEventListener('input',renderSchedule);
   $('#refreshBtn').addEventListener('click',pullFresh);
-  $('#bdBtn').addEventListener('click',genBreakdown);
+  $('#bdBtn').addEventListener('click',()=>genBreakdown());
+  $('#schedList').addEventListener('click',e=>{
+    const b=e.target.closest('[data-nav]');if(!b)return;
+    const mid=b.dataset.mid;
+    if(b.dataset.nav==='pred')goToPrediction(mid);
+    else if(b.dataset.nav==='squad')goToBreakdown(mid,{focus:'lineups'});
+    else goToBreakdown(mid);
+  });
   loadState().then(()=>{
     if(state.lastSync&&!state.lastSync.includes('seeded'))$('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
     renderSchedule();renderStandings();renderBdSelect();schedulePredictions();
