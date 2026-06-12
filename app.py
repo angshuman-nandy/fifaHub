@@ -292,6 +292,12 @@ async def _llm_openai(prompt, use_search, max_tokens, model):
     if not OPENAI_API_KEY:
         raise HTTPException(500, "Server missing OPENAI_API_KEY")
     body = {"model": model, "input": prompt, "max_output_tokens": max_tokens}
+    if model.startswith("gpt-5"):
+        # reasoning models bill hidden reasoning tokens against max_output_tokens —
+        # minimal effort (narratives need no deliberation) + headroom so the visible
+        # text isn't truncated by whatever reasoning remains
+        body["reasoning"] = {"effort": "minimal"}
+        body["max_output_tokens"] = min(max_tokens + 512, 2048)
     if use_search:
         body["tools"] = [{"type": "web_search_preview"}]
     async with httpx.AsyncClient(timeout=120) as client:
@@ -308,34 +314,43 @@ async def _llm_openai(prompt, use_search, max_tokens, model):
 
 @app.post("/api/llm")
 async def llm_proxy(request: Request):
-    """Provider-agnostic completion: {prompt, useSearch?, max_tokens?, tier?, cacheKey?}
-    -> {text, provider}. Which provider runs is chosen server-side via LLM_PROVIDER
-    (default 'anthropic'), so swapping providers is a config change only — the frontend's
-    prompts don't change. tier='fast' (default 'quality') picks a cheaper/smaller model
-    for short, low-stakes write-ups (e.g. the prediction-analysis summary).
-    cacheKey (e.g. 'bd:{espnId}') makes the response shared-cacheable: the first caller
-    pays for generation, everyone after gets {provider:'cache'} with zero LLM cost."""
+    """Provider-agnostic completion: {prompt, useSearch?, max_tokens?, tier?, cacheKey?,
+    provider?} -> {text, provider, model}. The default provider comes from LLM_PROVIDER
+    (server config); an explicit body provider ('anthropic'|'openai') overrides it so the
+    frontend can request both takes for a comparison view. tier='fast' (default 'quality')
+    picks a cheaper/smaller model for short, low-stakes write-ups.
+    cacheKey (e.g. 'bd:{espnId}') makes the response shared-cacheable per provider: the
+    first caller pays for generation, everyone after gets {provider:'cache'} for free."""
     body = await request.json()
     prompt = body.get("prompt", "")
     if not isinstance(prompt, str) or not prompt.strip():
         raise HTTPException(400, "Missing prompt")
-    cache_key = body.get("cacheKey")
-    if isinstance(cache_key, str) and cache_key in _narratives:
-        return {"text": _narratives[cache_key], "provider": "cache"}
-    use_search = bool(body.get("useSearch"))
-    max_tokens = min(int(body.get("max_tokens", 1000)), 1024)
+    provider = body.get("provider") if body.get("provider") in ("anthropic", "openai") else \
+        (LLM_PROVIDER if LLM_PROVIDER in ("anthropic", "openai") else "anthropic")
     tier = body.get("tier") if body.get("tier") in ("fast", "quality") else "quality"
-
-    provider = LLM_PROVIDER if LLM_PROVIDER in ("anthropic", "openai") else "anthropic"
     if provider == "openai":
         model = OPENAI_FAST_MODEL if tier == "fast" else OPENAI_MODEL
-        text = await _llm_openai(prompt, use_search, max_tokens, model)
     else:
         model = ANTHROPIC_FAST_MODEL if tier == "fast" else ANTHROPIC_MODEL
+
+    cache_key = body.get("cacheKey")
+    if isinstance(cache_key, str) and cache_key:
+        cache_key = f"{cache_key}:{provider}"  # each provider's take caches independently
+        if cache_key in _narratives:
+            return {"text": _narratives[cache_key], "provider": "cache", "model": model}
+    if body.get("cacheOnly"):
+        # lookup-only (e.g. pre-match prediction takes shown after FT) — never generate
+        raise HTTPException(404, "Not cached")
+    use_search = bool(body.get("useSearch"))
+    max_tokens = min(int(body.get("max_tokens", 1000)), 1024)
+
+    if provider == "openai":
+        text = await _llm_openai(prompt, use_search, max_tokens, model)
+    else:
         text = await _llm_anthropic(prompt, use_search, max_tokens, model)
     if isinstance(cache_key, str) and cache_key and text:
         _narrative_store(cache_key, text)
-    return {"text": text, "provider": provider}
+    return {"text": text, "provider": provider, "model": model}
 
 
 @app.get("/api/standings")

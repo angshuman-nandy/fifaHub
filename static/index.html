@@ -236,6 +236,26 @@ td.pts{font-weight:700;color:var(--chalk)}
 .tl .mn{font-family:var(--mono);color:var(--muted);min-width:42px;text-align:right;flex-shrink:0}
 .bdsrc{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;margin-top:16px;border-top:1px dashed var(--line);padding-top:10px}
 .bdnote{font-family:var(--mono);font-size:11px;color:var(--gold);text-align:center;border:1px solid #4A3F1C;border-radius:8px;padding:8px 12px;margin-bottom:14px}
+/* Claude/GPT take toggle */
+.lmtabs{display:flex;gap:8px;justify-content:center;margin:16px 0 10px}
+.lmchip{font-family:var(--mono);font-size:11px;letter-spacing:.06em;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 14px;cursor:pointer}
+.lmchip:hover{border-color:var(--gold);color:var(--gold)}
+.lmchip.on{border-color:var(--gold);color:var(--gold);background:#4A3F1C33}
+.lmtake.off{display:none}
+.lmmodel{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:center;margin-top:8px}
+/* per-match AI prediction takes (Predictions tab cards) */
+.aitake{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;line-height:1.55}
+.aitake .tk{margin-top:4px}
+.aitake .tk b{color:var(--gold);font-weight:400;margin-right:6px;white-space:nowrap}
+.aitake.stale{opacity:.55}
+.aitake .ldg{color:var(--muted);font-style:italic}
+/* footer credits */
+.credits{margin:56px 0 10px;display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--muted);border-top:1px dashed var(--line);padding-top:20px}
+.credits a{color:var(--chalk);text-decoration:none;border-bottom:1px dotted var(--muted)}
+.credits a:hover{color:var(--gold);border-bottom-color:var(--gold)}
+.credits a.ico{border-bottom:none}
+.credits svg{display:block}
+.credits .hrt{color:#E2574C}
 
 @media(max-width:560px){
   .tab{font-size:11px;padding:10px 4px}
@@ -310,6 +330,49 @@ td.pts{font-weight:700;color:var(--chalk)}
   </div>
   <div id="bdOut"></div>
 </section>
+
+<footer class="credits">
+  <span>built with <span class="hrt">♥</span> from</span>
+  <a class="ico" href="https://www.linkedin.com/in/angshuman-nandy/" target="_blank" rel="noopener" title="Angshuman — pixel edition">
+    <!-- 8-bit Angshuman in a gold-crested kit -->
+    <svg width="22" height="27" viewBox="0 0 8 10" shape-rendering="crispEdges" aria-hidden="true">
+      <rect x="2" y="0" width="4" height="2" fill="#2A1E14"/>
+      <rect x="2" y="2" width="4" height="2" fill="#E8B07A"/>
+      <rect x="3" y="2" width="1" height="1" fill="#1B1B1B"/>
+      <rect x="5" y="2" width="1" height="1" fill="#1B1B1B"/>
+      <rect x="1" y="4" width="6" height="3" fill="#1E9C5A"/>
+      <rect x="3" y="5" width="2" height="1" fill="#F2C14E"/>
+      <rect x="0" y="4" width="1" height="2" fill="#E8B07A"/>
+      <rect x="7" y="4" width="1" height="2" fill="#E8B07A"/>
+      <rect x="2" y="7" width="4" height="1" fill="#EFF6EF"/>
+      <rect x="2" y="8" width="1" height="1" fill="#E8B07A"/>
+      <rect x="5" y="8" width="1" height="1" fill="#E8B07A"/>
+      <rect x="2" y="9" width="1" height="1" fill="#1B1B1B"/>
+      <rect x="5" y="9" width="1" height="1" fill="#1B1B1B"/>
+    </svg>
+  </a>
+  <span><a href="https://www.linkedin.com/in/angshuman-nandy/" target="_blank" rel="noopener">Angshuman</a> <a href="https://github.com/angshuman-nandy" target="_blank" rel="noopener" title="GitHub">⌥ gh</a> and</span>
+  <a class="ico" href="https://claude.com/claude-code" target="_blank" rel="noopener" title="Claude Code">
+    <!-- Claude spark -->
+    <svg width="20" height="20" viewBox="-12 -12 24 24" aria-hidden="true">
+      <g stroke="#D97757" stroke-width="2.4" stroke-linecap="round">
+        <line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(0)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(30)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(60)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(90)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(120)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(150)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(180)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(210)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(240)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(270)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(300)"/>
+        <line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(330)"/>
+      </g>
+    </svg>
+  </a>
+  <span><a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a></span>
+</footer>
 
 </div>
 <div class="toast" id="toast" role="status"></div>
@@ -453,7 +516,8 @@ let state={
   koTeams:{},          /* kXX -> {h:'MEX', a:'RSA'} once known */
   breakdowns:{},
   espnIds:{},          /* mid -> ESPN event id, incl. upcoming matches (for Squad & Formations) */
-  predAnalysis:null,  /* {text, fingerprint, ts} — cached AI write-up over the Monte Carlo odds */
+  predAnalysis:null,  /* {takes, fingerprint, ts} — cached AI write-up over the Monte Carlo odds */
+  matchPreds:{},      /* mid -> {key, takes:{anthropic,openai}, ts} — per-match AI prediction takes */
   lastSync:'Jun 12, 2026 (seeded)'
 };
 
@@ -463,8 +527,8 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),4200)}
 
 /* persistence via artifact storage (private to you); silently falls back to in-memory */
-async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,lastSync:state.lastSync}))}catch(e){}}
-async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
+async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,matchPreds:state.matchPreds,lastSync:state.lastSync}))}catch(e){}}
+async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});Object.assign(state.matchPreds,s.matchPreds||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
 
 /* IST display: fixtures are US Eastern (EDT, UTC-4) for the whole Jun 11 – Jul 19 window; IST is UTC+5:30 → fixed +9:30 shift */
 const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
@@ -581,11 +645,29 @@ function renderStandings(){
 async function callLLM(prompt,useSearch,opts){
   opts=opts||{};
   const body={prompt,useSearch:!!useSearch,max_tokens:opts.max_tokens||1000,tier:opts.tier||'quality'};
-  if(opts.cacheKey)body.cacheKey=opts.cacheKey; /* server-side shared cache (one generation globally) */
+  if(opts.cacheKey)body.cacheKey=opts.cacheKey; /* server-side shared cache (one generation globally per provider) */
+  if(opts.provider)body.provider=opts.provider; /* explicit provider for dual-take comparisons */
+  if(opts.cacheOnly)body.cacheOnly=true;        /* lookup only — 404s instead of generating */
   const res=await fetch('/api/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!res.ok)throw new Error('API request failed ('+res.status+')');
-  const data=await res.json();
-  return data.text;
+  return res.json(); /* {text, provider, model} */
+}
+/* both providers' takes in parallel — null where a provider failed (e.g. key not configured) */
+async function callBothLLMs(prompt,opts){
+  const [a,o]=await Promise.allSettled([
+    callLLM(prompt,false,Object.assign({},opts,{provider:'anthropic'})),
+    callLLM(prompt,false,Object.assign({},opts,{provider:'openai'}))
+  ]);
+  return{anthropic:a.status==='fulfilled'?a.value:null,openai:o.status==='fulfilled'?o.value:null};
+}
+/* render provider takes inside a toggle (chips only when both providers delivered) */
+const LM_LABEL={anthropic:'◆ CLAUDE',openai:'● GPT'};
+const LM_NAME={anthropic:'Claude',openai:'GPT'};
+function takesHTML(takes,renderOne){
+  const provs=['anthropic','openai'].filter(p=>takes[p]);
+  if(!provs.length)return'';
+  const chips=provs.length>1?`<div class="lmtabs">${provs.map((p,i)=>`<button class="lmchip${i===0?' on':''}" data-prov="${p}">${LM_LABEL[p]}</button>`).join('')}</div>`:'';
+  return`<div class="lmwrap">${chips}${provs.map((p,i)=>`<div class="lmtake${i===0?'':' off'}" data-prov="${p}">${renderOne(takes[p],p)}</div>`).join('')}</div>`;
 }
 function extractJSON(text){
   const t=text.replace(/```json|```/g,'').trim();
@@ -825,19 +907,19 @@ function renderPredictions(){
     for(const m of GS.filter(m=>m[3]===g)){
       const r=state.results[m[0]];
       if(r&&r.status==='FT'){
-        html+=`<div class="pcard" id="pc-${m[0]}"><div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} ${r.hs}–${r.as} ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely" style="color:var(--green)">FINAL — locked into the model</span></div></div>`;
+        html+=`<div class="pcard" id="pc-${m[0]}" data-mpredft="${m[0]}"><div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} ${r.hs}–${r.as} ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely" style="color:var(--green)">FINAL — locked into the model</span></div>${aitakeFTHTML(m[0])}</div>`;
         continue;
       }
       const p=matchProbs(m[4],m[5]);
       const w=x=>Math.round(100*x);
-      html+=`<div class="pcard" id="pc-${m[0]}">
+      html+=`<div class="pcard" id="pc-${m[0]}" data-mpred="${m[0]}">
       <div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} vs ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely">most likely: ${p.best[0]}–${p.best[1]} · ${fmtIST(m[1],m[2]).date}</span></div>
       <div class="probbar">
         <div class="p1" style="width:${w(p.pH)}%">${m[4]} ${w(p.pH)}%</div>
         <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
         <div class="p2" style="width:${w(p.pA)}%">${m[5]} ${w(p.pA)}%</div>
       </div>
-      <div class="rat">${rationale(m[4],m[5],p)}</div></div>`;
+      <div class="rat">${rationale(m[4],m[5],p)}</div>${aitakeHTML(m[0])}</div>`;
     }
     html+='</div>';
   }
@@ -848,19 +930,19 @@ function renderPredictions(){
     for(const m of koms){
       const r=state.results[m.id];
       if(r&&r.status==='FT'){
-        html+=`<div class="pcard" id="pc-${m.id}"><div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely" style="color:var(--green)">${esc(m.label||STAGE_NAME[m.stage])} · FINAL</span></div></div>`;
+        html+=`<div class="pcard" id="pc-${m.id}" data-mpredft="${m.id}"><div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely" style="color:var(--green)">${esc(m.label||STAGE_NAME[m.stage])} · FINAL</span></div>${aitakeFTHTML(m.id)}</div>`;
         continue;
       }
       const p=matchProbs(m.h,m.a);
       const w=x=>Math.round(100*x);
-      html+=`<div class="pcard" id="pc-${m.id}">
+      html+=`<div class="pcard" id="pc-${m.id}" data-mpred="${m.id}">
       <div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely">${esc(m.label||STAGE_NAME[m.stage])} · most likely: ${p.best[0]}–${p.best[1]} · ${m.d}</span></div>
       <div class="probbar">
         <div class="p1" style="width:${w(p.pH)}%">${m.h} ${w(p.pH)}%</div>
         <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
         <div class="p2" style="width:${w(p.pA)}%">${m.a} ${w(p.pA)}%</div>
       </div>
-      <div class="rat">${rationale(m.h,m.a,p)}</div></div>`;
+      <div class="rat">${rationale(m.h,m.a,p)}</div>${aitakeHTML(m.id)}</div>`;
     }
   }
   const sfNames=rank.slice(0,4);
@@ -868,13 +950,21 @@ function renderPredictions(){
   <div class="koproj">Most frequent semifinal cast → <b>${sfNames.map(c=>teamFlag(c)+' '+TEAMS[c].n).join('</b> · <b>')}</b><br>
   Most likely final → <span class="f">${fpBest[0].split(' v ').map(c=>teamFlag(c)+' '+TEAMS[c].n).join('  vs  ')}</span> &nbsp;(${pct(fpBest[1],n)} of sims)<br>
   Champion call → <span class="f">🏆 ${TEAMS[top].n} (${pct(SIM.title[top],n)})</span> — re-runs automatically as real results lock in.</div>`;
-  /* AI analysis — cached against predFingerprint(); regenerated only when results change */
+  /* AI analysis — cached against predFingerprint(); regenerated only when a match ends.
+     New shape {takes:{anthropic,openai}} renders as a Claude/GPT toggle; legacy {text} still works. */
   const pa=state.predAnalysis,fresh=pa&&pa.fingerprint===predFingerprint();
+  let paHTML='';
+  if(pa&&pa.takes&&Object.keys(pa.takes).length){
+    paHTML=takesHTML(pa.takes,t=>`<p class="summ">${esc(t.text)}</p>${t.model?`<div class="lmmodel">${esc(t.model)}</div>`:''}`);
+  }else if(pa&&pa.text){
+    paHTML=`<p class="summ">${esc(pa.text)}</p>`;
+  }
   html+=`<div class="secl">AI analysis</div><div id="predAnalysis">
-    ${pa&&pa.text?`<p class="summ">${esc(pa.text)}</p>${fresh?'':'<div class="bdnote">New results since this analysis — regenerate for an up-to-date take.</div>'}<div class="bdsrc">Generated ${esc(pa.ts||'')}${fresh?' · up to date':''}</div>`:'<div class="empty">No AI analysis yet — generate a short write-up of the odds above.</div>'}
-    <div style="text-align:center;margin-top:10px"><button id="predAnalysisBtn" class="btn gold">${pa&&pa.text?(fresh?'↻ Regenerate AI Analysis':'✨ Update AI Analysis'):'✨ Generate AI Analysis'}</button></div>
+    ${paHTML?`${paHTML}${fresh?'':'<div class="bdnote">New results since this analysis — regenerate for an up-to-date take.</div>'}<div class="bdsrc">Generated ${esc(pa.ts||'')}${fresh?' · up to date':''}</div>`:'<div class="empty">No AI analysis yet — generate a short write-up of the odds above.</div>'}
+    <div style="text-align:center;margin-top:10px"><button id="predAnalysisBtn" class="btn gold">${paHTML?(fresh?'↻ Regenerate AI Analysis':'✨ Update AI Analysis'):'✨ Generate AI Analysis'}</button></div>
   </div>`;
   $('#predOut').innerHTML=html;
+  observeMatchPreds(); /* lazy-generate per-match AI takes as cards scroll into view */
 }
 /* prompt for the cheap-tier AI write-up over the current Monte Carlo odds */
 function buildPredAnalysisPrompt(){
@@ -893,15 +983,23 @@ Write a punchy 3-4 sentence analysis for fans: who the model favors and why, any
 async function genPredAnalysis(){
   if(!SIM)return;
   const fp=predFingerprint();
-  if(state.predAnalysis&&state.predAnalysis.fingerprint===fp&&state.predAnalysis.text){
+  if(state.predAnalysis&&state.predAnalysis.fingerprint===fp&&(state.predAnalysis.text||state.predAnalysis.takes)){
     toast('No new results since the last analysis');
     return;
   }
   const btn=$('#predAnalysisBtn');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>Analyzing…'}
   try{
-    const text=await callLLM(buildPredAnalysisPrompt(),false,{max_tokens:300});
-    state.predAnalysis={text:text.trim(),fingerprint:fp,ts:new Date().toLocaleString()};
+    /* both providers' takes; cacheKey means identical FT fingerprints across browsers
+       share one generation per provider */
+    const both=await callBothLLMs(buildPredAnalysisPrompt(),{max_tokens:300,cacheKey:'pred:'+fp});
+    const takes={};
+    for(const prov of['anthropic','openai']){
+      const r=both[prov];
+      if(r&&r.text)takes[prov]={text:r.text.trim(),model:r.model};
+    }
+    if(!Object.keys(takes).length)throw new Error('no provider responded');
+    state.predAnalysis={takes,fingerprint:fp,ts:new Date().toLocaleString()};
     await saveState();
     renderPredictions();
     toast('AI analysis ready ✨');
@@ -909,6 +1007,100 @@ async function genPredAnalysis(){
     toast('Analysis failed: '+e.message,true);
     if(btn){btn.disabled=false;btn.textContent='✨ Generate AI Analysis'}
   }
+}
+/* ---- per-match AI prediction takes (Claude + GPT, always visible on pcards) ----
+   Cache key = match id + the FT results of ITS two teams only, so a take regenerates
+   only when one of those teams finishes another match — not on unrelated results or
+   live ticks. Server-side cacheKey sharing means one generation globally per state. */
+function matchPredKey(mid,excludeSelf){
+  const m=allMatches().find(x=>x.id===mid);
+  if(!m||!m.h||!m.a)return null;
+  const rel=allMatches()
+    .filter(x=>x.id!==(excludeSelf?mid:null)&&(x.h===m.h||x.a===m.h||x.h===m.a||x.a===m.a)&&state.results[x.id]&&state.results[x.id].status==='FT')
+    .map(x=>{const r=state.results[x.id];return x.id+'='+r.hs+'-'+r.as}).sort().join(',');
+  return 'mpred:'+mid+':'+(rel||'none');
+}
+function buildMatchPredPrompt(m){
+  const p=matchProbs(m.h,m.a),w=x=>Math.round(100*x);
+  const form=c=>{
+    const fr=allMatches().filter(x=>(x.h===c||x.a===c)&&state.results[x.id]&&state.results[x.id].status==='FT')
+      .map(x=>{const r=state.results[x.id];return `${TEAMS[x.h].n} ${r.hs}-${r.as} ${TEAMS[x.a].n}`});
+    return fr.length?fr.join('; '):'no matches played yet';
+  };
+  const where=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
+  return `FIFA World Cup 2026, ${where}: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n}, ${m.rawD}.
+Stat model: ${m.h} win ${w(p.pH)}%, draw ${w(p.pD)}%, ${m.a} win ${w(p.pA)}%; most likely score ${p.best[0]}-${p.best[1]}.
+${TEAMS[m.h].n} (FIFA #${TEAMS[m.h].rk}; ${TEAMS[m.h].note}) results so far: ${form(m.h)}.
+${TEAMS[m.a].n} (FIFA #${TEAMS[m.a].rk}; ${TEAMS[m.a].note}) results so far: ${form(m.a)}.
+In 1-2 punchy sentences, give YOUR prediction for this match — winner (or draw), scoreline, and the one key reason. You may disagree with the stat model. Plain text only.`;
+}
+function aitakeRows(takes){
+  return ['anthropic','openai'].filter(p=>takes[p])
+    .map(p=>`<div class="tk"><b>${LM_LABEL[p]}</b>${esc(takes[p].text)}</div>`).join('');
+}
+function aitakeHTML(mid){
+  const c=state.matchPreds[mid],key=matchPredKey(mid);
+  const fresh=c&&c.takes&&c.key===key;
+  if(c&&c.takes){
+    return `<div class="aitake${fresh?'':' stale'}" id="aitake-${mid}">${aitakeRows(c.takes)}${fresh?'':'<div class="ldg">updating with latest results…</div>'}</div>`;
+  }
+  return `<div class="aitake" id="aitake-${mid}"><span class="ldg">✨ AI takes loading…</span></div>`;
+}
+/* finished match: show the frozen pre-match calls (so you can see who got it right);
+   never regenerated — a "prediction" for a decided match would be meaningless */
+function aitakeFTHTML(mid){
+  const c=state.matchPreds[mid];
+  if(c&&c.takes)return `<div class="aitake" id="aitake-${mid}"><div class="ldg">pre-match AI calls:</div>${aitakeRows(c.takes)}</div>`;
+  return `<div class="aitake" id="aitake-${mid}" style="display:none"></div>`; /* filled if the shared server cache has it */
+}
+const _mpredBusy=new Set();let _mpredQueue=[],_mpredActive=0;
+function queueMatchPred(mid,ft){
+  const c=state.matchPreds[mid];
+  if(ft){if(c&&(c.takes||c.none))return} /* FT: cached take is final; tombstone = lookup already missed */
+  else{const key=matchPredKey(mid);if(!key)return;if(c&&c.takes&&c.key===key)return}
+  if(_mpredBusy.has(mid))return;
+  _mpredBusy.add(mid);_mpredQueue.push({mid,ft:!!ft});drainMpred();
+}
+function drainMpred(){
+  while(_mpredActive<3&&_mpredQueue.length){ /* ≤3 matches in flight — no burst on scroll */
+    const job=_mpredQueue.shift();_mpredActive++;
+    genMatchPred(job.mid,job.ft).finally(()=>{_mpredActive--;_mpredBusy.delete(job.mid);drainMpred()});
+  }
+}
+async function genMatchPred(mid,ft){
+  const m=allMatches().find(x=>x.id===mid);
+  const r0=state.results[mid];
+  if(!ft&&r0&&r0.status==='FT')return; /* match ended between render and intersect — never generate post-hoc */
+  /* FT: reconstruct the pre-match key (exclude the match's own result) and do a
+     cache-only lookup — another user may have generated it pre-match; never generate */
+  const key=matchPredKey(mid,ft);
+  if(!m||!key)return;
+  try{
+    const both=await callBothLLMs(buildMatchPredPrompt(m),{max_tokens:150,cacheKey:key,cacheOnly:!!ft});
+    const takes={};
+    for(const prov of['anthropic','openai']){
+      const r=both[prov];
+      if(r&&r.text)takes[prov]={text:r.text.trim(),model:r.model};
+    }
+    if(!Object.keys(takes).length){
+      if(ft){state.matchPreds[mid]={key,none:true};await saveState()} /* tombstone: ask the server once, ever */
+      return; /* upcoming: placeholder stays, retried on next view */
+    }
+    state.matchPreds[mid]={key,takes,ts:new Date().toLocaleString()};
+    await saveState();
+  }catch(e){return}
+  const el=document.getElementById('aitake-'+mid);
+  if(el)el.outerHTML=ft?aitakeFTHTML(mid):aitakeHTML(mid);
+}
+let _mpredObserver=null;
+function observeMatchPreds(){
+  const cards=document.querySelectorAll('.pcard[data-mpred],.pcard[data-mpredft]');
+  const kick=el=>el.dataset.mpredft?queueMatchPred(el.dataset.mpredft,true):queueMatchPred(el.dataset.mpred);
+  if(!('IntersectionObserver' in window)){cards.forEach(kick);return}
+  if(!_mpredObserver)_mpredObserver=new IntersectionObserver(es=>{
+    es.forEach(en=>{if(en.isIntersecting){_mpredObserver.unobserve(en.target);kick(en.target)}});
+  },{rootMargin:'200px'});
+  cards.forEach(el=>_mpredObserver.observe(el));
 }
 /* prediction sim runs in a Web Worker built by stringifying the pure sim fns above (zero logic duplication) */
 let simTimer=null,predWorker=null,predBlobUrl=null,predGen=0,predUpdatedAt=null,predWorkerBroken=false;
@@ -987,7 +1179,24 @@ function renderBreakdown(m,b,opts){
   /* live play-by-play (ESPN, newest first) — shown only mid-match; free, no LLM */
   const commentary=(opts.live&&b.commentary&&b.commentary.length)?`<div class="secl">Live commentary</div><div class="timeline">${[...b.commentary].reverse().map(c=>`<div class="tl"><span class="mn">${esc(c.min||'')}</span><span>·</span><span>${esc(c.text||'')}</span></div>`).join('')}</div>`:'';
   const fromESPN=!!(b.info||hasXI('home')||hasXI('away'));
-  const hasNarrative=!!(b.summary||b.tactical||b.mvp||(b.turning_points&&b.turning_points.length));
+  /* narrative: dual-provider takes (b.narratives, toggle) or legacy flat fields */
+  const renderNarrTake=t=>`
+    ${t.summary?`<p class="summ">${esc(t.summary)}</p>`:''}
+    ${t.turning_points&&t.turning_points.length?`<div class="secl">Turning points</div><ul>${t.turning_points.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+    ${t.tactical?`<div class="secl">Tactical view</div><p class="summ">${esc(t.tactical)}</p>`:''}
+    ${t.mvp?`<div class="mvp">★ Player of the match — ${esc(t.mvp)}</div>`:''}
+    ${t.model?`<div class="lmmodel">${esc(t.model)}</div>`:''}`;
+  let narrativeHTML='',aiLabel='';
+  if(b.narratives&&Object.keys(b.narratives).length){
+    narrativeHTML=takesHTML(b.narratives,renderNarrTake);
+    aiLabel=Object.keys(b.narratives).map(p=>LM_NAME[p]).join(' & ');
+  }else if(b.summary||b.tactical||b.mvp||(b.turning_points&&b.turning_points.length)){
+    narrativeHTML=`
+    ${b.turning_points&&b.turning_points.length?`<div class="secl">Turning points</div><ul>${b.turning_points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
+    ${b.tactical?`<div class="secl">Tactical view</div><p class="summ">${esc(b.tactical)}</p>`:''}
+    ${b.mvp?`<div class="mvp">★ Player of the match — ${esc(b.mvp)}</div>`:''}`;
+    aiLabel='AI web research';
+  }
   $('#bdOut').innerHTML=`<div class="bd">
     ${opts.note?`<div class="bdnote">${esc(opts.note)}</div>`:''}
     <div class="secl" style="text-align:center">${meta}</div>
@@ -999,10 +1208,8 @@ function renderBreakdown(m,b,opts){
     ${statsHTML}
     ${commentary}
     ${timeline}
-    ${b.turning_points&&b.turning_points.length?`<div class="secl">Turning points</div><ul>${b.turning_points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
-    ${b.tactical?`<div class="secl">Tactical view</div><p class="summ">${esc(b.tactical)}</p>`:''}
-    ${b.mvp?`<div class="mvp">★ Player of the match — ${esc(b.mvp)}</div>`:''}
-    ${fromESPN?`<div class="bdsrc">Lineups &amp; stats: ESPN${hasNarrative?' · Analysis: AI web research':''}</div>`:''}
+    ${narrativeHTML}
+    ${fromESPN?`<div class="bdsrc">Lineups &amp; stats: ESPN${aiLabel?' · Analysis: '+aiLabel:''}</div>`:''}
   </div>`;
 }
 async function genBreakdown(forceId){
@@ -1047,15 +1254,22 @@ ${JSON.stringify(ground)}
 Using ONLY these facts, respond with ONLY a JSON object, no other text or fences:
 {"summary":"3-4 sentence narrative of how the match unfolded, in your own words","turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)","tactical":"2-3 sentences on the tactical battle — formations, pressing, key matchups"}
 Keep it concise and consistent with the facts above.`;
-      const text=await callLLM(prompt,false,{max_tokens:600,cacheKey:'bd:'+res.espnId});
-      narrative=extractJSON(text);
+      /* both providers' takes (cached once each globally) — viewers can flip between them */
+      const both=await callBothLLMs(prompt,{max_tokens:600,cacheKey:'bd:'+res.espnId});
+      const narratives={};
+      for(const prov of['anthropic','openai']){
+        const r=both[prov];if(!r)continue;
+        try{narratives[prov]=Object.assign(extractJSON(r.text),{model:r.model})}catch(e){}
+      }
+      if(Object.keys(narratives).length)narrative={narratives};
+      else throw new Error('No provider returned a usable narrative');
     }else{
       prompt=`Search the web for the full match report of the FIFA World Cup 2026 game: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}).
 Respond with ONLY a JSON object, no other text or fences:
 {"score":"2-1","scorers":["Name (TEAM) 23'"],"summary":"3-4 sentence narrative of how the match unfolded, in your own words","stats":{"possession":"58% - 42%","shots":"14 - 6","shots_on_target":"6 - 2","xG":"1.9 - 0.4"},"turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)"}
 Keep everything concise and factual from the latest reports.`;
-      const text=await callLLM(prompt,true);
-      narrative=extractJSON(text);
+      const r=await callLLM(prompt,true); /* rare no-facts fallback: single provider, legacy flat shape */
+      narrative=extractJSON(r.text);
     }
   }catch(e){claudeErr=e}
   if(!facts&&!narrative){ /* neither source delivered — existing error UI */
@@ -1129,8 +1343,17 @@ function init(){
   $('#fTeam').addEventListener('input',renderSchedule);
   $('#refreshBtn').addEventListener('click',pullFresh);
   $('#bdBtn').addEventListener('click',()=>genBreakdown());
+  /* Claude/GPT take toggle — delegated because the containers are innerHTML-swapped */
+  const lmToggle=e=>{
+    const c=e.target.closest('.lmchip');if(!c)return;
+    const w=c.closest('.lmwrap');if(!w)return;
+    w.querySelectorAll('.lmchip').forEach(x=>x.classList.toggle('on',x===c));
+    w.querySelectorAll('.lmtake').forEach(t=>t.classList.toggle('off',t.dataset.prov!==c.dataset.prov));
+  };
+  $('#bdOut').addEventListener('click',lmToggle);
   $('#predOut').addEventListener('click',e=>{
-    if(e.target.id==='predAnalysisBtn')genPredAnalysis();
+    if(e.target.id==='predAnalysisBtn'){genPredAnalysis();return}
+    lmToggle(e);
   });
   $('#schedList').addEventListener('click',e=>{
     const b=e.target.closest('[data-nav]');if(!b)return;
