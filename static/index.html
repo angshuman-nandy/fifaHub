@@ -249,6 +249,11 @@ td.pts{font-weight:700;color:var(--chalk)}
 .aitake .tk b{color:var(--gold);font-weight:400;margin-right:6px;white-space:nowrap}
 .aitake.stale{opacity:.55}
 .aitake .ldg{color:var(--muted);font-style:italic}
+.aipicks{font-family:var(--mono);font-size:11px;color:var(--chalk);margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.aipicks .pk b{margin-right:4px;color:var(--muted);font-weight:400}
+.aipicks .pk.gold b{color:var(--gold)}
+.aipicks .pk.dim{color:var(--muted)}
+.aipicks .sep{color:var(--line)}
 /* footer credits */
 .credits{margin:56px 0 10px;display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--muted);border-top:1px dashed var(--line);padding-top:20px}
 .credits a{color:var(--chalk);text-decoration:none;border-bottom:1px dotted var(--muted)}
@@ -377,18 +382,6 @@ td.pts{font-weight:700;color:var(--chalk)}
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script>
-/* passcode gate (client-side; APP_PASSCODE templated in by app.py) */
-(function(){
-  const PASSCODE='__APP_PASSCODE__';
-  if(!PASSCODE)return;
-  if(sessionStorage.getItem('wc26_pass')===PASSCODE)return;
-  let attempt=prompt('Enter passcode to access WC26 Pitchside Hub:');
-  while(attempt!==PASSCODE){
-    if(attempt===null){document.documentElement.innerHTML='<body style="background:#0A1611;color:#EFF6EF;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center">Access denied.</body>';throw new Error('Access denied');}
-    attempt=prompt('Incorrect passcode. Try again:');
-  }
-  sessionStorage.setItem('wc26_pass',attempt);
-})();
 /* localStorage shim replacing the Claude.ai artifact storage API */
 window.storage={
   async get(k){const v=localStorage.getItem(k);return v==null?null:{key:k,value:v}},
@@ -576,12 +569,15 @@ function bugHTML(m){
     }
     if(links.length)nav=`<div class="cardnav">${links.join('')}</div>`;
   }
-  return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}">
+  /* three-way picks (⚙ stat / ◆ Claude / ● GPT) for matches that haven't finished */
+  const picks=(m.h&&m.a&&st!=='FT')?picksHTML(m.id):'';
+  return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}"${picks?` data-mpred="${m.id}"`:''}>
     <div class="meta"><span>${tag}</span><span>${esc(m.d)} · ${esc(m.t)} IST</span><span class="st-${st}">${st==='LIVE'?'● LIVE':st}</span></div>
     <div class="row ${hw?'w':''}"><span class="fl">${teamFlag(m.h)}</span><span class="tn">${m.h?TEAMS[m.h].n:'To be decided'}<small>${m.h||''}</small></span><span class="sc">${hs??'–'}</span></div>
     <div class="row ${aw?'w':''}"><span class="fl">${teamFlag(m.a)}</span><span class="tn">${m.a?TEAMS[m.a].n:'To be decided'}<small>${m.a||''}</small></span><span class="sc">${as??'–'}</span></div>
     ${r&&r.scorers&&r.scorers.length?`<div class="scorers">${r.scorers.map(esc).join(' · ')}</div>`:''}
     <div class="venue">📍 ${m.v}</div>
+    ${picks}
     ${nav}
   </div>`;
 }
@@ -606,6 +602,7 @@ function renderSchedule(){
   }
   $('#schedList').innerHTML=html+'</div>';
   updateRail();
+  observeMatchPreds(); /* lazy-generate AI picks for cards as they scroll into view */
 }
 function updateRail(){
   const order=['GS','R32','R16','QF','SF','F'];
@@ -919,6 +916,7 @@ function renderPredictions(){
         <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
         <div class="p2" style="width:${w(p.pA)}%">${m[5]} ${w(p.pA)}%</div>
       </div>
+      ${picksHTML(m[0])}
       <div class="rat">${rationale(m[4],m[5],p)}</div>${aitakeHTML(m[0])}</div>`;
     }
     html+='</div>';
@@ -942,6 +940,7 @@ function renderPredictions(){
         <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
         <div class="p2" style="width:${w(p.pA)}%">${m.a} ${w(p.pA)}%</div>
       </div>
+      ${picksHTML(m.id)}
       <div class="rat">${rationale(m.h,m.a,p)}</div>${aitakeHTML(m.id)}</div>`;
     }
   }
@@ -1018,7 +1017,7 @@ function matchPredKey(mid,excludeSelf){
   const rel=allMatches()
     .filter(x=>x.id!==(excludeSelf?mid:null)&&(x.h===m.h||x.a===m.h||x.h===m.a||x.a===m.a)&&state.results[x.id]&&state.results[x.id].status==='FT')
     .map(x=>{const r=state.results[x.id];return x.id+'='+r.hs+'-'+r.as}).sort().join(',');
-  return 'mpred:'+mid+':'+(rel||'none');
+  return 'mpred2:'+mid+':'+(rel||'none'); /* v2: structured {score,take} JSON format */
 }
 function buildMatchPredPrompt(m){
   const p=matchProbs(m.h,m.a),w=x=>Math.round(100*x);
@@ -1028,15 +1027,40 @@ function buildMatchPredPrompt(m){
     return fr.length?fr.join('; '):'no matches played yet';
   };
   const where=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
-  return `FIFA World Cup 2026, ${where}: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n}, ${m.rawD}.
+  return `FIFA World Cup 2026, ${where}: ${TEAMS[m.h].n} (home side of the fixture) vs ${TEAMS[m.a].n}, ${m.rawD}.
 Stat model: ${m.h} win ${w(p.pH)}%, draw ${w(p.pD)}%, ${m.a} win ${w(p.pA)}%; most likely score ${p.best[0]}-${p.best[1]}.
 ${TEAMS[m.h].n} (FIFA #${TEAMS[m.h].rk}; ${TEAMS[m.h].note}) results so far: ${form(m.h)}.
 ${TEAMS[m.a].n} (FIFA #${TEAMS[m.a].rk}; ${TEAMS[m.a].note}) results so far: ${form(m.a)}.
-In 1-2 punchy sentences, give YOUR prediction for this match — winner (or draw), scoreline, and the one key reason. You may disagree with the stat model. Plain text only.`;
+Give YOUR prediction — you may disagree with the stat model. Respond with ONLY a JSON object, no other text or fences:
+{"score":"2-1","take":"1-2 punchy sentences: who wins (or draw) and the one key reason"}
+"score" is your predicted final scoreline as ${TEAMS[m.h].n}-goals dash ${TEAMS[m.a].n}-goals.`;
 }
 function aitakeRows(takes){
   return ['anthropic','openai'].filter(p=>takes[p])
-    .map(p=>`<div class="tk"><b>${LM_LABEL[p]}</b>${esc(takes[p].text)}</div>`).join('');
+    .map(p=>`<div class="tk"><b>${LM_LABEL[p]}</b>${esc(takes[p].take||takes[p].text||'')}</div>`).join('');
+}
+/* compact three-way picks: ⚙ stat model · ◆ Claude · ● GPT */
+function _pickParse(m,score){
+  const t=String(score||'').match(/^(\d+)-(\d+)$/);if(!t)return null;
+  const hs=+t[1],as=+t[2];
+  return hs+'–'+as+' '+(hs>as?m.h:(as>hs?m.a:'draw'));
+}
+function picksHTML(mid,opts){
+  opts=opts||{};
+  const m=allMatches().find(x=>x.id===mid);
+  if(!m||!m.h||!m.a)return'';
+  const p=matchProbs(m.h,m.a);
+  const stat=p.best[0]+'–'+p.best[1]+' '+(p.best[0]>p.best[1]?m.h:(p.best[1]>p.best[0]?m.a:'draw'));
+  const GL={anthropic:'◆',openai:'●'};
+  const parts=[`<span class="pk" title="stat model (Poisson)"><b>⚙</b>${stat}</span>`];
+  const c=state.matchPreds[mid];
+  for(const prov of['anthropic','openai']){
+    const t=c&&c.takes&&c.takes[prov];
+    const pick=t&&t.score?_pickParse(m,t.score):null;
+    if(pick)parts.push(`<span class="pk gold" title="${LM_NAME[prov]}"><b>${GL[prov]}</b>${pick}</span>`);
+    else if(!opts.noPending)parts.push(`<span class="pk dim" title="${LM_NAME[prov]}"><b>${GL[prov]}</b>…</span>`);
+  }
+  return `<div class="aipicks" data-aipicks="${mid}">${parts.join('<span class="sep">·</span>')}</div>`;
 }
 function aitakeHTML(mid){
   const c=state.matchPreds[mid],key=matchPredKey(mid);
@@ -1050,7 +1074,10 @@ function aitakeHTML(mid){
    never regenerated — a "prediction" for a decided match would be meaningless */
 function aitakeFTHTML(mid){
   const c=state.matchPreds[mid];
-  if(c&&c.takes)return `<div class="aitake" id="aitake-${mid}"><div class="ldg">pre-match AI calls:</div>${aitakeRows(c.takes)}</div>`;
+  if(c&&c.takes){
+    const hasScores=Object.values(c.takes).some(t=>t.score);
+    return `<div class="aitake" id="aitake-${mid}"><div class="ldg">pre-match AI calls:</div>${hasScores?picksHTML(mid,{noPending:true}):''}${aitakeRows(c.takes)}</div>`;
+  }
   return `<div class="aitake" id="aitake-${mid}" style="display:none"></div>`; /* filled if the shared server cache has it */
 }
 const _mpredBusy=new Set();let _mpredQueue=[],_mpredActive=0;
@@ -1076,11 +1103,16 @@ async function genMatchPred(mid,ft){
   const key=matchPredKey(mid,ft);
   if(!m||!key)return;
   try{
-    const both=await callBothLLMs(buildMatchPredPrompt(m),{max_tokens:150,cacheKey:key,cacheOnly:!!ft});
+    const both=await callBothLLMs(buildMatchPredPrompt(m),{max_tokens:180,cacheKey:key,cacheOnly:!!ft});
     const takes={};
     for(const prov of['anthropic','openai']){
       const r=both[prov];
-      if(r&&r.text)takes[prov]={text:r.text.trim(),model:r.model};
+      if(!r||!r.text)continue;
+      try{ /* structured {score,take}; prose fallback if a model ignores the JSON ask */
+        const j=extractJSON(r.text);
+        const sc=String(j.score||'').trim();
+        takes[prov]={score:/^\d+\s*-\s*\d+$/.test(sc)?sc.replace(/\s/g,''):null,take:String(j.take||'').trim(),model:r.model};
+      }catch(e){takes[prov]={text:r.text.trim(),model:r.model}}
     }
     if(!Object.keys(takes).length){
       if(ft){state.matchPreds[mid]={key,none:true};await saveState()} /* tombstone: ask the server once, ever */
@@ -1091,10 +1123,12 @@ async function genMatchPred(mid,ft){
   }catch(e){return}
   const el=document.getElementById('aitake-'+mid);
   if(el)el.outerHTML=ft?aitakeFTHTML(mid):aitakeHTML(mid);
+  /* refresh every picks row for this match (schedule card + predictions card) */
+  document.querySelectorAll(`[data-aipicks="${mid}"]`).forEach(p=>{p.outerHTML=picksHTML(mid,{noPending:!!ft})});
 }
 let _mpredObserver=null;
 function observeMatchPreds(){
-  const cards=document.querySelectorAll('.pcard[data-mpred],.pcard[data-mpredft]');
+  const cards=document.querySelectorAll('[data-mpred],[data-mpredft]'); /* pcards + schedule bugs */
   const kick=el=>el.dataset.mpredft?queueMatchPred(el.dataset.mpredft,true):queueMatchPred(el.dataset.mpred);
   if(!('IntersectionObserver' in window)){cards.forEach(kick);return}
   if(!_mpredObserver)_mpredObserver=new IntersectionObserver(es=>{
@@ -1365,6 +1399,7 @@ function init(){
   loadState().then(()=>{
     if(state.lastSync&&!state.lastSync.includes('seeded'))$('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
     renderSchedule();renderStandings();renderBdSelect();schedulePredictions();
+    pullFresh(); /* auto-sync on open — cached state renders instantly above, then live scores land on top */
   });
 }
 init();

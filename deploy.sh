@@ -28,10 +28,6 @@ for repo_var in GH_REPO HF_SPACE; do
     fail=1
   fi
 done
-if [ "${APP_PASSCODE:-}" = "REPLACE_ME" ]; then
-  echo "WARNING: APP_PASSCODE left as REPLACE_ME -- disabling the passcode gate. Set a real value or leave it blank." >&2
-  export APP_PASSCODE=""
-fi
 [ "$fail" = "1" ] && exit 1
 
 for cmd in git python3 pip; do
@@ -83,8 +79,6 @@ api = HfApi(token=os.environ["HF_TOKEN"])
 space = os.environ["HF_SPACE"]
 api.create_repo(repo_id=space, repo_type="space", space_sdk="docker", exist_ok=True)
 api.add_space_secret(repo_id=space, key="ANTHROPIC_API_KEY", value=os.environ["ANTHROPIC_API_KEY"])
-if os.environ.get("APP_PASSCODE"):
-    api.add_space_secret(repo_id=space, key="APP_PASSCODE", value=os.environ["APP_PASSCODE"])
 PYEOF
 
 echo "==> Trigger first deploy"

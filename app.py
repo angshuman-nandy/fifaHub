@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import time
@@ -11,7 +12,6 @@ load_dotenv()
 app = FastAPI()
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-APP_PASSCODE = os.environ.get("APP_PASSCODE", "")
 ALLOWED_TOOLS = {"web_search_20250305"}
 
 # Provider-agnostic LLM proxy (/api/llm) — server picks Anthropic vs OpenAI so the
@@ -47,24 +47,70 @@ def _cache_set(key, payload):
     _cache[key] = (time.time(), payload)
 
 
-# Shared narrative cache: a match's LLM narrative is generated at most once globally —
-# every user/device after the first gets it free. File-backed best effort (HF Spaces
-# storage is ephemeral, so it resets on Space restart; per-browser caches still apply).
+# Shared narrative cache: a match's LLM narrative/take is generated at most once
+# globally — every user/device after the first gets it free. Backed two ways:
+#  - local JSON file (fast, but HF Spaces storage is ephemeral — dies on restart)
+#  - private HF dataset repo (CACHE_DATASET + HF_TOKEN): downloaded at startup,
+#    re-uploaded (debounced) after new entries, so the cache survives restarts/deploys.
 NARRATIVE_CACHE_FILE = "narrative_cache.json"
-try:
-    with open(NARRATIVE_CACHE_FILE) as f:
-        _narratives = json.load(f)
-except Exception:
-    _narratives = {}
+CACHE_DATASET = os.environ.get("CACHE_DATASET", "")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+
+
+def _load_narratives():
+    data = {}
+    if CACHE_DATASET and HF_TOKEN:
+        try:
+            from huggingface_hub import hf_hub_download
+            p = hf_hub_download(repo_id=CACHE_DATASET, repo_type="dataset",
+                                filename="narrative_cache.json", token=HF_TOKEN)
+            with open(p) as f:
+                data.update(json.load(f))
+        except Exception:
+            pass  # dataset missing/unreachable — start from local file only
+    try:
+        with open(NARRATIVE_CACHE_FILE) as f:
+            data.update(json.load(f))  # local file wins (newer than last upload)
+    except Exception:
+        pass
+    return data
+
+
+_narratives = _load_narratives()
+_cache_upload_task = None
+
+
+async def _upload_cache_soon():
+    """Debounced dataset sync — coalesces bursts of new entries into one commit."""
+    global _cache_upload_task
+    await asyncio.sleep(20)
+    _cache_upload_task = None
+    try:
+        from huggingface_hub import HfApi
+        await asyncio.to_thread(
+            HfApi(token=HF_TOKEN).upload_file,
+            path_or_fileobj=NARRATIVE_CACHE_FILE,
+            path_in_repo="narrative_cache.json",
+            repo_id=CACHE_DATASET, repo_type="dataset",
+            commit_message="cache sync",
+        )
+    except Exception:
+        pass  # next store schedules another attempt
 
 
 def _narrative_store(key, text):
+    global _cache_upload_task
     _narratives[key] = text
     try:
         with open(NARRATIVE_CACHE_FILE, "w") as f:
             json.dump(_narratives, f)
     except Exception:
         pass  # read-only/full disk — in-memory copy still serves this process
+    if CACHE_DATASET and HF_TOKEN and _cache_upload_task is None:
+        try:
+            _cache_upload_task = asyncio.get_running_loop().create_task(_upload_cache_soon())
+        except RuntimeError:
+            pass  # not inside the event loop — sync will happen on a later store
 
 
 def _stage_from_text(*texts):
@@ -221,7 +267,7 @@ with open("static/index.html") as f:
 
 @app.get("/")
 async def index():
-    return HTMLResponse(INDEX_HTML.replace("__APP_PASSCODE__", APP_PASSCODE))
+    return HTMLResponse(INDEX_HTML)
 
 
 @app.post("/api/claude")
