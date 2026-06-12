@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import httpx
@@ -24,6 +25,12 @@ ANTHROPIC_FAST_MODEL = os.environ.get("ANTHROPIC_FAST_MODEL", "claude-haiku-4-5-
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").lower()
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world"
+# FIFA's own public feed (powers fifa.com) — used as a fallback when ESPN is down.
+# Undocumented but stable; requires a browser User-Agent. Season 285023 = World Cup 2026.
+FIFA_BASE = "https://api.fifa.com/api/v3"
+FIFA_SEASON = "285023"
+FIFA_COMPETITION = "17"
+FIFA_HEADERS = {"User-Agent": "Mozilla/5.0"}
 DEFAULT_DATES = "20260611-20260719"
 CACHE_TTL = 60  # seconds
 _cache = {}  # key -> (timestamp, payload)
@@ -38,6 +45,26 @@ def _cache_get(key):
 
 def _cache_set(key, payload):
     _cache[key] = (time.time(), payload)
+
+
+# Shared narrative cache: a match's LLM narrative is generated at most once globally —
+# every user/device after the first gets it free. File-backed best effort (HF Spaces
+# storage is ephemeral, so it resets on Space restart; per-browser caches still apply).
+NARRATIVE_CACHE_FILE = "narrative_cache.json"
+try:
+    with open(NARRATIVE_CACHE_FILE) as f:
+        _narratives = json.load(f)
+except Exception:
+    _narratives = {}
+
+
+def _narrative_store(key, text):
+    _narratives[key] = text
+    try:
+        with open(NARRATIVE_CACHE_FILE, "w") as f:
+            json.dump(_narratives, f)
+    except Exception:
+        pass  # read-only/full disk — in-memory copy still serves this process
 
 
 def _stage_from_text(*texts):
@@ -142,6 +169,52 @@ def _normalize_scoreboard(data, include_upcoming=False):
         })
     return matches
 
+def _normalize_fifa(data, include_upcoming=False):
+    """Map FIFA calendar matches onto the same shape _normalize_scoreboard emits.
+    Degraded-but-correct fallback: no scorers and no ESPN event id (lineups/breakdowns
+    need ESPN anyway), but scores/status/stage are FIFA-official."""
+    matches = []
+    for r in data.get("Results") or []:
+        home, away = r.get("Home") or {}, r.get("Away") or {}
+        if not home.get("Abbreviation") or not away.get("Abbreviation"):
+            continue  # pairing not known yet (TBD knockout slots)
+        ms = r.get("MatchStatus")
+        if ms == 0:
+            status = "FT"
+        elif ms == 3:
+            status = "LIVE"
+        elif ms == 1 and include_upcoming:
+            status = "UPCOMING"
+        else:
+            continue
+
+        def _name(side):
+            tn = side.get("TeamName") or []
+            return tn[0].get("Description", "") if tn else ""
+
+        def _score(side):
+            try:
+                return int(side.get("Score"))
+            except (TypeError, ValueError):
+                return None
+
+        stage_name = r.get("StageName") or []
+        stage_text = stage_name[0].get("Description", "") if stage_name else ""
+        matches.append({
+            "home": (home.get("Abbreviation") or "").upper(),
+            "away": (away.get("Abbreviation") or "").upper(),
+            "homeName": _name(home),
+            "awayName": _name(away),
+            "hs": None if status == "UPCOMING" else _score(home),
+            "as": None if status == "UPCOMING" else _score(away),
+            "status": status,
+            "stage": _stage_from_text(stage_text),
+            "scorers": [],
+            "espnId": "",
+        })
+    return matches
+
+
 with open("static/index.html") as f:
     INDEX_HTML = f.read()
 
@@ -235,15 +308,20 @@ async def _llm_openai(prompt, use_search, max_tokens, model):
 
 @app.post("/api/llm")
 async def llm_proxy(request: Request):
-    """Provider-agnostic completion: {prompt, useSearch?, max_tokens?, tier?} -> {text, provider}.
-    Which provider runs is chosen server-side via LLM_PROVIDER (default 'anthropic'), so
-    swapping providers is a config change only — the frontend's prompts don't change.
-    tier='fast' (default 'quality') picks a cheaper/smaller model for short, low-stakes
-    write-ups (e.g. the prediction-analysis summary) without changing the prompt contract."""
+    """Provider-agnostic completion: {prompt, useSearch?, max_tokens?, tier?, cacheKey?}
+    -> {text, provider}. Which provider runs is chosen server-side via LLM_PROVIDER
+    (default 'anthropic'), so swapping providers is a config change only — the frontend's
+    prompts don't change. tier='fast' (default 'quality') picks a cheaper/smaller model
+    for short, low-stakes write-ups (e.g. the prediction-analysis summary).
+    cacheKey (e.g. 'bd:{espnId}') makes the response shared-cacheable: the first caller
+    pays for generation, everyone after gets {provider:'cache'} with zero LLM cost."""
     body = await request.json()
     prompt = body.get("prompt", "")
     if not isinstance(prompt, str) or not prompt.strip():
         raise HTTPException(400, "Missing prompt")
+    cache_key = body.get("cacheKey")
+    if isinstance(cache_key, str) and cache_key in _narratives:
+        return {"text": _narratives[cache_key], "provider": "cache"}
     use_search = bool(body.get("useSearch"))
     max_tokens = min(int(body.get("max_tokens", 1000)), 1024)
     tier = body.get("tier") if body.get("tier") in ("fast", "quality") else "quality"
@@ -255,6 +333,8 @@ async def llm_proxy(request: Request):
     else:
         model = ANTHROPIC_FAST_MODEL if tier == "fast" else ANTHROPIC_MODEL
         text = await _llm_anthropic(prompt, use_search, max_tokens, model)
+    if isinstance(cache_key, str) and cache_key and text:
+        _narrative_store(cache_key, text)
     return {"text": text, "provider": provider}
 
 
@@ -264,16 +344,32 @@ async def standings(dates: str = DEFAULT_DATES, upcoming: bool = False):
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    url = f"{ESPN_BASE}/scoreboard?dates={dates}"
+    # ESPN primary (rich: scorers + event ids for lineups/commentary). An empty
+    # list from a successful fetch is legitimate (no finished matches yet) — only
+    # a fetch error triggers the fallback.
+    matches, source = None, None
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.get(url)
+            r = await client.get(f"{ESPN_BASE}/scoreboard?dates={dates}")
         r.raise_for_status()
-        data = r.json()
+        matches, source = _normalize_scoreboard(r.json(), include_upcoming=upcoming), "espn"
     except Exception:
-        raise HTTPException(502, "ESPN scoreboard fetch failed")
-    matches = _normalize_scoreboard(data, include_upcoming=upcoming)
-    payload = {"matches": matches, "source": "espn"}
+        pass
+    # FIFA official feed fallback (scores/status only — keeps the scoreboard accurate
+    # with zero LLM involvement even when ESPN is down)
+    if matches is None:
+        try:
+            url = (f"{FIFA_BASE}/calendar/matches?idSeason={FIFA_SEASON}"
+                   f"&idCompetition={FIFA_COMPETITION}&language=en&count=200")
+            async with httpx.AsyncClient(timeout=20) as client:
+                r = await client.get(url, headers=FIFA_HEADERS)
+            r.raise_for_status()
+            matches, source = _normalize_fifa(r.json(), include_upcoming=upcoming), "fifa"
+        except Exception:
+            pass
+    if matches is None:
+        raise HTTPException(502, "Scoreboard fetch failed (ESPN and FIFA)")
+    payload = {"matches": matches, "source": source}
     _cache_set(key, payload)
     return payload
 
@@ -390,6 +486,15 @@ def _normalize_match(data):
                 s += " (OG)"
             scorers.append(s)
 
+    # play-by-play commentary (chronological from ESPN; frontend shows newest first).
+    # Free, real-time text for live matches — replaces any LLM call mid-match.
+    commentary = []
+    for c in (data.get("commentary") or [])[-40:]:
+        txt = c.get("text") or ""
+        mn = ((c.get("time") or {}).get("displayValue")) or ""
+        if txt:
+            commentary.append({"min": mn, "text": txt})
+
     return {
         "info": info,
         "home": home,
@@ -397,6 +502,7 @@ def _normalize_match(data):
         "stats": stats,
         "events": events,
         "scorers": scorers,
+        "commentary": commentary,
     }
 
 

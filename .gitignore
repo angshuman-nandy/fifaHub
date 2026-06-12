@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 instructions.md
 worldcup26-hub.html
+narrative_cache.json

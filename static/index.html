@@ -581,6 +581,7 @@ function renderStandings(){
 async function callLLM(prompt,useSearch,opts){
   opts=opts||{};
   const body={prompt,useSearch:!!useSearch,max_tokens:opts.max_tokens||1000,tier:opts.tier||'quality'};
+  if(opts.cacheKey)body.cacheKey=opts.cacheKey; /* server-side shared cache (one generation globally) */
   const res=await fetch('/api/llm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!res.ok)throw new Error('API request failed ('+res.status+')');
   const data=await res.json();
@@ -592,11 +593,10 @@ function extractJSON(text){
   if(i<0||j<0)throw new Error('No JSON found in response');
   return JSON.parse(t.slice(i,j+1));
 }
-const CODES=Object.keys(TEAMS).join(', ');
-/* ESPN-first standings fetch (server-side proxy at /api/standings dodges CORS) */
+/* standings fetch — the proxy falls back ESPN → FIFA server-side (dodges CORS too) */
 async function fetchStandingsESPN(){
   const res=await fetch('/api/standings');
-  if(!res.ok)throw new Error('ESPN endpoint '+res.status);
+  if(!res.ok)throw new Error('Standings endpoint '+res.status);
   return res.json();
 }
 /* resolve ESPN abbreviations / display names onto the app's TEAMS codes */
@@ -661,21 +661,9 @@ async function pullFresh(){
   const btn=$('#refreshBtn');btn.disabled=true;
   btn.innerHTML='<span class="spin"></span>Pulling live results…';
   try{
-    let json,source;
-    try{
-      json=await fetchStandingsESPN();source='ESPN';
-      if(!json.matches||!json.matches.length)throw new Error('ESPN returned no matches');
-    }catch(espnErr){
-      /* fall back to Claude web search */
-      btn.innerHTML='<span class="spin"></span>Searching live results…';
-      const today=new Date().toDateString();
-      const prompt=`Today is ${today}. Search the web for the latest FIFA World Cup 2026 results (tournament runs Jun 11 - Jul 19, 2026 in USA/Mexico/Canada). Find ALL matches that have FINISHED or are LIVE so far, focusing on the most recent days.
-Respond with ONLY a JSON object, no other text, no markdown fences:
-{"matches":[{"home":"MEX","away":"RSA","hs":1,"as":0,"status":"FT","stage":"GS","scorers":["Quiñones (MEX) 9'"]}]}
-Rules: use ONLY these 3-letter codes: ${CODES}. "status" is "FT" (finished) or "LIVE". "stage" is one of GS, R32, R16, QF, SF, BRONZE, F. "scorers" lists goal scorers with team code and minute, max 6 per match. Include every finished match of the tournament so far. Keep it compact.`;
-      const text=await callLLM(prompt,true);
-      json=extractJSON(text);source='AI';
-    }
+    /* server handles the fallback chain (ESPN → FIFA official feed) — no LLM involved */
+    const json=await fetchStandingsESPN();
+    const source=json.source==='fifa'?'FIFA':'ESPN';
     if(!json.matches||!Array.isArray(json.matches))throw new Error('Unexpected response shape');
     let updated=0;
     const pairIndex=buildGSPairIndex();
@@ -790,11 +778,12 @@ function runSims(n){
   SIM={n,title,finals,finalPair,advCount,winGrp};
 }
 function pct(x,n){return(100*x/n).toFixed(x/n>=.1?0:1)+'%'}
-/* fingerprint of confirmed results — AI prediction analysis only regenerates when this changes */
+/* fingerprint of FINISHED results — the AI prediction analysis only regenerates when a
+   match ends, not on live score ticks (live matches aren't locked into the model anyway) */
 function predFingerprint(){
-  return Object.keys(state.results).sort().map(id=>{
-    const r=state.results[id];return id+':'+r.status+':'+r.hs+'-'+r.as;
-  }).join('|');
+  return Object.keys(state.results).sort()
+    .filter(id=>state.results[id].status==='FT')
+    .map(id=>{const r=state.results[id];return id+':'+r.hs+'-'+r.as}).join('|');
 }
 function rationale(h,a,p){
   const dH=TEAMS[h],dA=TEAMS[a];
@@ -911,7 +900,7 @@ async function genPredAnalysis(){
   const btn=$('#predAnalysisBtn');
   if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>Analyzing…'}
   try{
-    const text=await callLLM(buildPredAnalysisPrompt(),false,{tier:'fast',max_tokens:300});
+    const text=await callLLM(buildPredAnalysisPrompt(),false,{max_tokens:300});
     state.predAnalysis={text:text.trim(),fingerprint:fp,ts:new Date().toLocaleString()};
     await saveState();
     renderPredictions();
@@ -995,6 +984,8 @@ function renderBreakdown(m,b,opts){
   }
   const tlIcon={goal:'⚽',yellow:'🟨',red:'🟥',sub:'🔁'};
   const timeline=(b.events&&b.events.length)?`<div class="secl">Match timeline</div><div class="timeline">${b.events.map(ev=>`<div class="tl"><span class="mn">${esc(ev.min||'')}</span><span>${tlIcon[ev.type]||'·'}</span><span>${esc(ev.text||'')}</span></div>`).join('')}</div>`:'';
+  /* live play-by-play (ESPN, newest first) — shown only mid-match; free, no LLM */
+  const commentary=(opts.live&&b.commentary&&b.commentary.length)?`<div class="secl">Live commentary</div><div class="timeline">${[...b.commentary].reverse().map(c=>`<div class="tl"><span class="mn">${esc(c.min||'')}</span><span>·</span><span>${esc(c.text||'')}</span></div>`).join('')}</div>`:'';
   const fromESPN=!!(b.info||hasXI('home')||hasXI('away'));
   const hasNarrative=!!(b.summary||b.tactical||b.mvp||(b.turning_points&&b.turning_points.length));
   $('#bdOut').innerHTML=`<div class="bd">
@@ -1006,6 +997,7 @@ function renderBreakdown(m,b,opts){
     ${b.summary?`<p class="summ">${esc(b.summary)}</p>`:''}
     ${lineups}
     ${statsHTML}
+    ${commentary}
     ${timeline}
     ${b.turning_points&&b.turning_points.length?`<div class="secl">Turning points</div><ul>${b.turning_points.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
     ${b.tactical?`<div class="secl">Tactical view</div><p class="summ">${esc(b.tactical)}</p>`:''}
@@ -1027,7 +1019,7 @@ async function genBreakdown(forceId){
     const b=Object.assign({},facts);
     if(res0.hs!=null)b.score=res0.hs+'-'+res0.as;
     if((!b.scorers||!b.scorers.length)&&res0.scorers)b.scorers=res0.scorers;
-    renderBreakdown(m,b,{note:'⏱ Full analysis available at full time.'});
+    renderBreakdown(m,b,{note:'⏱ Full analysis available at full time.',live:true});
     return;
   }
   if(state.breakdowns[id]){renderBreakdown(m,state.breakdowns[id]);toast('Loaded saved breakdown');return}
@@ -1036,7 +1028,10 @@ async function genBreakdown(forceId){
   const res=res0;
   /* ESPN structured facts first (when we know the event id) */
   let facts=res.espnId?await fetchFacts(res.espnId):null;
-  /* Claude narrative — grounded in ESPN facts when available, full research otherwise */
+  /* LLM narrative — when ESPN facts exist, generate from them alone (no web search:
+     it's the dominant token cost and the facts already tell the full story); the
+     server-side cacheKey means each match's narrative is generated once globally.
+     Web search is kept only for the rare finished match ESPN has no data for. */
   let narrative=null,claudeErr=null;
   try{
     let prompt;
@@ -1045,20 +1040,23 @@ async function genBreakdown(forceId){
       const ground={score:(res.hs!=null?res.hs+'-'+res.as:''),scorers:facts.scorers&&facts.scorers.length?facts.scorers:(res.scorers||[]),
         home:facts.home&&{team:facts.home.teamName,formation:facts.home.formation,startingXI:(facts.home.startingXI||[]).map(p=>p.name)},
         away:facts.away&&{team:facts.away.teamName,formation:facts.away.formation,startingXI:(facts.away.startingXI||[]).map(p=>p.name)},
-        stats:facts.stats};
+        stats:facts.stats,
+        key_events:(facts.events||[]).map(ev=>ev.min+' '+ev.type+': '+ev.text)};
       prompt=`Here are verified facts for the FIFA World Cup 2026 match ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}):
 ${JSON.stringify(ground)}
-Search the web for reactions and context, then respond with ONLY a JSON object, no other text or fences:
+Using ONLY these facts, respond with ONLY a JSON object, no other text or fences:
 {"summary":"3-4 sentence narrative of how the match unfolded, in your own words","turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)","tactical":"2-3 sentences on the tactical battle — formations, pressing, key matchups"}
 Keep it concise and consistent with the facts above.`;
+      const text=await callLLM(prompt,false,{max_tokens:600,cacheKey:'bd:'+res.espnId});
+      narrative=extractJSON(text);
     }else{
       prompt=`Search the web for the full match report of the FIFA World Cup 2026 game: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}).
 Respond with ONLY a JSON object, no other text or fences:
 {"score":"2-1","scorers":["Name (TEAM) 23'"],"summary":"3-4 sentence narrative of how the match unfolded, in your own words","stats":{"possession":"58% - 42%","shots":"14 - 6","shots_on_target":"6 - 2","xG":"1.9 - 0.4"},"turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)"}
 Keep everything concise and factual from the latest reports.`;
+      const text=await callLLM(prompt,true);
+      narrative=extractJSON(text);
     }
-    const text=await callLLM(prompt,true);
-    narrative=extractJSON(text);
   }catch(e){claudeErr=e}
   if(!facts&&!narrative){ /* neither source delivered — existing error UI */
     $('#bdOut').innerHTML='<div class="empty">Couldn\'t complete the research — '+esc(claudeErr?claudeErr.message:'no data')+'.<br>Give it another try.</div>';
