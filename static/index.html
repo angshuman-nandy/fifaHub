@@ -618,14 +618,17 @@ function renderSchedule(){
 /* "Live & Upcoming": today's live match (if any) plus today's remaining kickoffs —
    finished-today matches drop off once full time so the tab stays focused on what's next */
 function renderLiveUpcoming(){
-  const todayISO=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  const now=new Date();
+  const todayISO=now.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  const todayLabel=now.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',month:'short',day:'numeric'});
   const ms=allMatches().filter(m=>{
-    if(m.iso!==todayISO) return false;
     const r=state.results[m.id];
-    return !(r&&r.status==='FT');
+    if(r&&r.status==='FT') return false;
+    if(r&&r.status==='LIVE') return true; /* in progress — keep showing even if it kicked off "yesterday" IST */
+    return m.iso===todayISO;
   }).sort((a,b)=>a.ts-b.ts);
   if(!ms.length){$('#liveList').innerHTML='<div class="empty">No live or upcoming matches today.</div>';return}
-  $('#liveList').innerHTML=`<div class="day"><h3>Today</h3><span class="dn">${esc(ms[0].d)}</span></div><div class="mgrid">${ms.map(bugHTML).join('')}</div>`;
+  $('#liveList').innerHTML=`<div class="day"><h3>Today</h3><span class="dn">${esc(todayLabel)}</span></div><div class="mgrid">${ms.map(bugHTML).join('')}</div>`;
   observeMatchPreds();
 }
 function updateRail(){
