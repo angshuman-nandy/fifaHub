@@ -568,13 +568,14 @@ def _normalize_match(data):
 
 
 @app.get("/api/match")
-async def match(event: str):
+async def match(event: str, fresh: bool = False):
     if not event:
         raise HTTPException(404, "Missing event id")
     key = f"match:{event}"
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
+    if not fresh:
+        cached = _cache_get(key)
+        if cached is not None:
+            return cached
     url = f"{ESPN_BASE}/summary?event={event}"
     try:
         async with httpx.AsyncClient(timeout=20) as client:

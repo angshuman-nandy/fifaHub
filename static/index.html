@@ -298,6 +298,7 @@ td.pts{font-weight:700;color:var(--chalk)}
   </div>
   <div class="subtabs">
     <button class="subtab on" data-view="fixtures">Fixtures</button>
+    <button class="subtab" data-view="live">Live &amp; Upcoming</button>
     <button class="subtab" data-view="standings">Group Standings</button>
   </div>
   <div id="view-fixtures">
@@ -309,9 +310,13 @@ td.pts{font-weight:700;color:var(--chalk)}
         <option value="F">Bronze &amp; Final</option>
       </select>
       <select id="fGroup"><option value="">All groups</option></select>
+      <input type="date" id="fDate" title="Filter by date">
       <input type="text" id="fTeam" placeholder="Search team or venue…">
     </div>
     <div id="schedList"></div>
+  </div>
+  <div id="view-live" style="display:none">
+    <div id="liveList"></div>
   </div>
   <div id="view-standings" style="display:none">
     <div class="stand" id="standList"></div>
@@ -332,6 +337,7 @@ td.pts{font-weight:700;color:var(--chalk)}
   <div class="bar">
     <select id="bdSelect" style="flex:1;min-width:220px"></select>
     <button class="btn gold" id="bdBtn">Generate Breakdown</button>
+    <button class="btn" id="refreshCommentaryBtn" style="display:none">↻ Refresh Commentary</button>
   </div>
   <div id="bdOut"></div>
 </section>
@@ -535,14 +541,16 @@ function fmtIST(dateStr,timeStr){
   const dt=new Date(Date.UTC(2026,MONTHS[dm[1]],+dm[2]+(tm[4]?1:0),h+4,+tm[2]));
   const out={
     date:dt.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',month:'short',day:'numeric'}),
-    time:dt.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'numeric',minute:'2-digit',hour12:true})
+    time:dt.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'numeric',minute:'2-digit',hour12:true}),
+    iso:dt.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}),
+    ts:dt.getTime()
   };
   _istCache[key]=out;
   return out;
 }
 function allMatches(){
-  const g=GS.map(m=>{const i=fmtIST(m[1],m[2]);return{id:m[0],stage:'GS',d:i.date,t:i.time,rawD:m[1],g:m[3],h:m[4],a:m[5],v:VEN[m[6]]}});
-  const k=KO.map(m=>{const kt=state.koTeams[m[0]]||{};const i=fmtIST(m[2],m[3]);return{id:m[0],stage:m[1],d:i.date,t:i.time,rawD:m[2],g:null,h:kt.h||null,a:kt.a||null,v:VEN[m[4]],label:KO_LABEL[m[0]]||STAGE_NAME[m[1]]}});
+  const g=GS.map(m=>{const i=fmtIST(m[1],m[2]);return{id:m[0],stage:'GS',d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[1],g:m[3],h:m[4],a:m[5],v:VEN[m[6]]}});
+  const k=KO.map(m=>{const kt=state.koTeams[m[0]]||{};const i=fmtIST(m[2],m[3]);return{id:m[0],stage:m[1],d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[2],g:null,h:kt.h||null,a:kt.a||null,v:VEN[m[4]],label:KO_LABEL[m[0]]||STAGE_NAME[m[1]]}});
   return g.concat(k);
 }
 const teamName=c=>TEAMS[c]?TEAMS[c].n:(c||'TBD');
@@ -569,9 +577,11 @@ function bugHTML(m){
     }
     if(links.length)nav=`<div class="cardnav">${links.join('')}</div>`;
   }
-  /* three-way picks (⚙ stat / ◆ Claude / ● GPT) for matches that haven't finished */
-  const picks=(m.h&&m.a&&st!=='FT')?picksHTML(m.id):'';
-  return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}"${picks?` data-mpred="${m.id}"`:''}>
+  /* three-way picks (⚙ stat / ◆ Claude / ● GPT) — FT matches keep showing the frozen
+     pre-match calls (cache-only lookup via data-mpredft) so they don't vanish at full time */
+  const picks=(m.h&&m.a)?picksHTML(m.id,{noPending:st==='FT'}):'';
+  const predAttr=picks?(st==='FT'?` data-mpredft="${m.id}"`:` data-mpred="${m.id}"`):'';
+  return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}"${predAttr}>
     <div class="meta"><span>${tag}</span><span>${esc(m.d)} · ${esc(m.t)} IST</span><span class="st-${st}">${st==='LIVE'?'● LIVE':st}</span></div>
     <div class="row ${hw?'w':''}"><span class="fl">${teamFlag(m.h)}</span><span class="tn">${m.h?TEAMS[m.h].n:'To be decided'}<small>${m.h||''}</small></span><span class="sc">${hs??'–'}</span></div>
     <div class="row ${aw?'w':''}"><span class="fl">${teamFlag(m.a)}</span><span class="tn">${m.a?TEAMS[m.a].n:'To be decided'}<small>${m.a||''}</small></span><span class="sc">${as??'–'}</span></div>
@@ -582,10 +592,11 @@ function bugHTML(m){
   </div>`;
 }
 function renderSchedule(){
-  const fs=$('#fStage').value, fg=$('#fGroup').value, q=$('#fTeam').value.trim().toLowerCase();
+  const fs=$('#fStage').value, fg=$('#fGroup').value, fd=$('#fDate').value, q=$('#fTeam').value.trim().toLowerCase();
   let ms=allMatches().filter(m=>{
     if(fs && (fs==='F'?(m.stage!=='F'):(m.stage!==fs))) return false;
     if(fg && m.g!==fg) return false;
+    if(fd && m.iso!==fd) return false;
     if(q){
       const hay=[teamName(m.h),teamName(m.a),m.h,m.a,m.v].join(' ').toLowerCase();
       if(!hay.includes(q)) return false;
@@ -603,6 +614,19 @@ function renderSchedule(){
   $('#schedList').innerHTML=html+'</div>';
   updateRail();
   observeMatchPreds(); /* lazy-generate AI picks for cards as they scroll into view */
+}
+/* "Live & Upcoming": today's live match (if any) plus today's remaining kickoffs —
+   finished-today matches drop off once full time so the tab stays focused on what's next */
+function renderLiveUpcoming(){
+  const todayISO=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  const ms=allMatches().filter(m=>{
+    if(m.iso!==todayISO) return false;
+    const r=state.results[m.id];
+    return !(r&&r.status==='FT');
+  }).sort((a,b)=>a.ts-b.ts);
+  if(!ms.length){$('#liveList').innerHTML='<div class="empty">No live or upcoming matches today.</div>';return}
+  $('#liveList').innerHTML=`<div class="day"><h3>Today</h3><span class="dn">${esc(ms[0].d)}</span></div><div class="mgrid">${ms.map(bugHTML).join('')}</div>`;
+  observeMatchPreds();
 }
 function updateRail(){
   const order=['GS','R32','R16','QF','SF','F'];
@@ -697,9 +721,11 @@ function buildGSPairIndex(){
   return idx;
 }
 /* tiny /api/match wrapper used by both the squad viewer and live breakdowns */
-async function fetchFacts(espnId){
+async function fetchFacts(espnId,opts){
   try{
-    const r=await fetch('/api/match?event='+encodeURIComponent(espnId));
+    let url='/api/match?event='+encodeURIComponent(espnId);
+    if(opts&&opts.fresh)url+='&fresh=1';
+    const r=await fetch(url);
     if(r.ok)return await r.json();
   }catch(e){}
   return null;
@@ -773,7 +799,7 @@ async function pullFresh(){
     $('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
     await saveState();
     /* scoreboard fresh + interactive first; predictions recompute async in a Worker */
-    renderSchedule();renderStandings();renderBdSelect();
+    renderSchedule();renderLiveUpcoming();renderStandings();renderBdSelect();
     toast(updated?('Updated '+updated+' match'+(updated>1?'es':'')+' via '+source+' ⚽'):'No new finished matches found yet');
     btn.disabled=false;btn.innerHTML='⟳ Pull Fresh Standings';
     schedulePredictions();
@@ -1051,14 +1077,13 @@ function picksHTML(mid,opts){
   if(!m||!m.h||!m.a)return'';
   const p=matchProbs(m.h,m.a);
   const stat=p.best[0]+'–'+p.best[1]+' '+(p.best[0]>p.best[1]?m.h:(p.best[1]>p.best[0]?m.a:'draw'));
-  const GL={anthropic:'◆',openai:'●'};
-  const parts=[`<span class="pk" title="stat model (Poisson)"><b>⚙</b>${stat}</span>`];
+  const parts=[`<span class="pk" title="stat model (Poisson)"><b>⚙ STAT</b>${stat}</span>`];
   const c=state.matchPreds[mid];
   for(const prov of['anthropic','openai']){
     const t=c&&c.takes&&c.takes[prov];
     const pick=t&&t.score?_pickParse(m,t.score):null;
-    if(pick)parts.push(`<span class="pk gold" title="${LM_NAME[prov]}"><b>${GL[prov]}</b>${pick}</span>`);
-    else if(!opts.noPending)parts.push(`<span class="pk dim" title="${LM_NAME[prov]}"><b>${GL[prov]}</b>…</span>`);
+    if(pick)parts.push(`<span class="pk gold" title="${LM_NAME[prov]}"><b>${LM_LABEL[prov]}</b>${pick}</span>`);
+    else if(!opts.noPending)parts.push(`<span class="pk dim" title="${LM_NAME[prov]}"><b>${LM_LABEL[prov]}</b>…</span>`);
   }
   return `<div class="aipicks" data-aipicks="${mid}">${parts.join('<span class="sep">·</span>')}</div>`;
 }
@@ -1180,6 +1205,11 @@ function renderBdSelect(){
   sel.innerHTML=fin.map(m=>{const r=state.results[m.id];
     return `<option value="${m.id}">${m.d} — ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} (${m.stage==='GS'?'Group '+m.g:m.label||STAGE_NAME[m.stage]})</option>`}).join('');
 }
+/* live play-by-play (ESPN, newest first) — shown only mid-match; free, no LLM */
+function renderCommentaryHTML(commentary){
+  if(!commentary||!commentary.length)return'';
+  return `<div class="secl">Live commentary</div><div class="timeline">${[...commentary].reverse().map(c=>`<div class="tl"><span class="mn">${esc(c.min||'')}</span><span>·</span><span>${esc(c.text||'')}</span></div>`).join('')}</div>`;
+}
 function renderBreakdown(m,b,opts){
   opts=opts||{};
   const info=b.info||{};
@@ -1210,8 +1240,7 @@ function renderBreakdown(m,b,opts){
   }
   const tlIcon={goal:'⚽',yellow:'🟨',red:'🟥',sub:'🔁'};
   const timeline=(b.events&&b.events.length)?`<div class="secl">Match timeline</div><div class="timeline">${b.events.map(ev=>`<div class="tl"><span class="mn">${esc(ev.min||'')}</span><span>${tlIcon[ev.type]||'·'}</span><span>${esc(ev.text||'')}</span></div>`).join('')}</div>`:'';
-  /* live play-by-play (ESPN, newest first) — shown only mid-match; free, no LLM */
-  const commentary=(opts.live&&b.commentary&&b.commentary.length)?`<div class="secl">Live commentary</div><div class="timeline">${[...b.commentary].reverse().map(c=>`<div class="tl"><span class="mn">${esc(c.min||'')}</span><span>·</span><span>${esc(c.text||'')}</span></div>`).join('')}</div>`:'';
+  const commentary=opts.live?`<div id="bd-commentary">${renderCommentaryHTML(b.commentary)}</div>`:'';
   const fromESPN=!!(b.info||hasXI('home')||hasXI('away'));
   /* narrative: dual-provider takes (b.narratives, toggle) or legacy flat fields */
   const renderNarrTake=t=>`
@@ -1246,12 +1275,14 @@ function renderBreakdown(m,b,opts){
     ${fromESPN?`<div class="bdsrc">Lineups &amp; stats: ESPN${aiLabel?' · Analysis: '+aiLabel:''}</div>`:''}
   </div>`;
 }
+let curLiveBdId=null; /* match id of the live breakdown currently shown (drives "Refresh Commentary") */
 async function genBreakdown(forceId){
   const id=forceId||$('#bdSelect').value;if(!id){toast('No finished matches to break down yet',true);return}
   const m=allMatches().find(x=>x.id===id);if(!m)return;
   const res0=state.results[id]||{};
   if(res0.status!=='FT'){
     /* live (or otherwise unfinished): ESPN facts only — no narrative call, nothing cached */
+    curLiveBdId=null;$('#refreshCommentaryBtn').style.display='none';
     $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Fetching live lineups &amp; stats…</div>';
     let espnId=res0.espnId;
     if(!espnId){try{await ensureEspnIds()}catch(e){} espnId=state.espnIds[id]}
@@ -1261,8 +1292,10 @@ async function genBreakdown(forceId){
     if(res0.hs!=null)b.score=res0.hs+'-'+res0.as;
     if((!b.scorers||!b.scorers.length)&&res0.scorers)b.scorers=res0.scorers;
     renderBreakdown(m,b,{note:'⏱ Full analysis available at full time.',live:true});
+    if(res0.status==='LIVE'&&espnId){curLiveBdId=id;$('#refreshCommentaryBtn').style.display=''}
     return;
   }
+  curLiveBdId=null;$('#refreshCommentaryBtn').style.display='none';
   if(state.breakdowns[id]){renderBreakdown(m,state.breakdowns[id]);toast('Loaded saved breakdown');return}
   const btn=$('#bdBtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Researching…';
   $('#bdOut').innerHTML='<div class="empty">Pulling lineups &amp; stats, then researching the story…</div>';
@@ -1320,6 +1353,22 @@ Keep everything concise and factual from the latest reports.`;
   toast(narrative?'Breakdown ready 📋':'Facts loaded — narrative unavailable right now');
   btn.disabled=false;btn.textContent='Generate Breakdown';
 }
+/* re-fetches just the ESPN play-by-play for the live match currently shown and
+   swaps the "Live commentary" timeline in place — bypasses the 60s server cache
+   so a click always pulls the latest text */
+async function refreshCommentary(){
+  if(!curLiveBdId)return;
+  const res=state.results[curLiveBdId]||{};
+  const espnId=res.espnId||state.espnIds[curLiveBdId];
+  if(!espnId)return;
+  const btn=$('#refreshCommentaryBtn');btn.disabled=true;const orig=btn.textContent;btn.textContent='Refreshing…';
+  try{
+    const facts=await fetchFacts(espnId,{fresh:true});
+    const el=$('#bd-commentary');
+    if(facts&&el)el.innerHTML=renderCommentaryHTML(facts.commentary);
+    else if(!facts)toast('Could not refresh commentary',true);
+  }finally{btn.disabled=false;btn.textContent=orig}
+}
 
 /* ============ CARD NAVIGATION ============ */
 function activateTab(paneId){
@@ -1337,6 +1386,7 @@ async function goToBreakdown(mid){
   activateTab('p-break');
   $('#bdSelect').value=mid;
   if(state.breakdowns[mid]){
+    curLiveBdId=null;$('#refreshCommentaryBtn').style.display='none';
     const m=allMatches().find(x=>x.id===mid);
     if(m)renderBreakdown(m,state.breakdowns[mid]);
   }else{
@@ -1351,6 +1401,7 @@ async function goToBreakdown(mid){
 async function showSquad(mid){
   activateTab('p-break');
   $('#bdSelect').value=mid;
+  curLiveBdId=null;$('#refreshCommentaryBtn').style.display='none';
   const m=allMatches().find(x=>x.id===mid);if(!m)return;
   $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Fetching lineups…</div>';
   let espnId=state.results[mid]&&state.results[mid].espnId;
@@ -1371,12 +1422,14 @@ function init(){
   $$('.subtab').forEach(t=>t.addEventListener('click',()=>{
     $$('.subtab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
     $('#view-fixtures').style.display=t.dataset.view==='fixtures'?'':'none';
+    $('#view-live').style.display=t.dataset.view==='live'?'':'none';
     $('#view-standings').style.display=t.dataset.view==='standings'?'':'none';
   }));
-  ['fStage','fGroup'].forEach(i=>$('#'+i).addEventListener('change',renderSchedule));
+  ['fStage','fGroup','fDate'].forEach(i=>$('#'+i).addEventListener('change',renderSchedule));
   $('#fTeam').addEventListener('input',renderSchedule);
   $('#refreshBtn').addEventListener('click',pullFresh);
   $('#bdBtn').addEventListener('click',()=>genBreakdown());
+  $('#refreshCommentaryBtn').addEventListener('click',refreshCommentary);
   /* Claude/GPT take toggle — delegated because the containers are innerHTML-swapped */
   const lmToggle=e=>{
     const c=e.target.closest('.lmchip');if(!c)return;
@@ -1389,16 +1442,18 @@ function init(){
     if(e.target.id==='predAnalysisBtn'){genPredAnalysis();return}
     lmToggle(e);
   });
-  $('#schedList').addEventListener('click',e=>{
+  const cardNavClick=e=>{
     const b=e.target.closest('[data-nav]');if(!b)return;
     const mid=b.dataset.mid;
     if(b.dataset.nav==='pred')goToPrediction(mid);
     else if(b.dataset.nav==='squad')showSquad(mid);
     else goToBreakdown(mid);
-  });
+  };
+  $('#schedList').addEventListener('click',cardNavClick);
+  $('#liveList').addEventListener('click',cardNavClick);
   loadState().then(()=>{
     if(state.lastSync&&!state.lastSync.includes('seeded'))$('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
-    renderSchedule();renderStandings();renderBdSelect();schedulePredictions();
+    renderSchedule();renderLiveUpcoming();renderStandings();renderBdSelect();schedulePredictions();
     pullFresh(); /* auto-sync on open — cached state renders instantly above, then live scores land on top */
   });
 }
