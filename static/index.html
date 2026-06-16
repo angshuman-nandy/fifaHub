@@ -77,10 +77,11 @@ h1 .y2{color:var(--red)}
 
 /* ---------- controls ---------- */
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
-select,input[type=text]{
+select,input[type=text],input[type=date]{
   background:var(--panel);border:1px solid var(--line);color:var(--chalk);
   font-family:var(--mono);font-size:12px;padding:10px 12px;border-radius:8px;
 }
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6)}
 select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
 input[type=text]{flex:1;min-width:140px}
 .btn{
@@ -157,8 +158,10 @@ td.pts{font-weight:700;color:var(--chalk)}
 .pgroup{margin:30px 0}
 .pgroup>h3{font-family:'Archivo Black',sans-serif;font-size:18px;margin-bottom:4px}
 .pgroup>h3 span{color:var(--gold)}
-.qline{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.8}
+.qline{font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.9}
 .qline b{color:var(--green)}
+.odds-block{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.odds-hd{font-family:'Archivo',sans-serif;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
 .pcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
 .pcard .ph{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px}
 .pcard .ph .ms{font-weight:800;font-size:15px}
@@ -249,6 +252,18 @@ td.pts{font-weight:700;color:var(--chalk)}
 .aitake .tk b{color:var(--gold);font-weight:400;margin-right:6px;white-space:nowrap}
 .aitake.stale{opacity:.55}
 .aitake .ldg{color:var(--muted);font-style:italic}
+/* card-level prediction / facts tabs */
+.ctabs{display:flex;gap:6px;margin:10px 0 8px}
+.ctab{background:transparent;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer;transition:all .15s}
+.ctab.on{background:var(--panel);color:var(--chalk);border-color:var(--chalk)}
+.ctabpane{display:none}.ctabpane.on{display:block}
+/* facts pane */
+.fsec{margin-bottom:12px;font-family:var(--mono);font-size:11px;line-height:1.6}
+.fsec b{color:var(--chalk);display:block;margin-bottom:4px}
+.fsec p,.fsec li{color:var(--muted)}
+.fsec ul{margin:2px 0;padding-left:14px}
+.ftworow{display:flex;gap:12px}.ftworow>div{flex:1;min-width:0}
+.ftworow h5{font-size:10px;color:var(--gold);margin:0 0 3px;font-family:'Archivo',sans-serif;text-transform:uppercase;letter-spacing:.05em}
 .aipicks{font-family:var(--mono);font-size:11px;color:var(--chalk);margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .aipicks .pk b{margin-right:4px;color:var(--muted);font-weight:400}
 .aipicks .pk.gold b{color:var(--gold)}
@@ -285,9 +300,9 @@ td.pts{font-weight:700;color:var(--chalk)}
 </header>
 
 <nav class="tabs" role="tablist">
-  <button class="tab on" role="tab" data-pane="p-sched"><span class="n">TAB 01</span>Schedule &amp; Scores</button>
-  <button class="tab" role="tab" data-pane="p-pred"><span class="n">TAB 02</span>Predictions</button>
-  <button class="tab" role="tab" data-pane="p-break"><span class="n">TAB 03</span>Match Breakdown</button>
+  <button class="tab on" role="tab" data-pane="p-sched"><span class="n">TAB 01</span>Schedules &amp; Scores</button>
+  <button class="tab" role="tab" data-pane="p-break"><span class="n">TAB 02</span>Match Breakdown</button>
+  <button class="tab" role="tab" data-pane="p-pred"><span class="n">TAB 03</span>Predictions</button>
 </nav>
 
 <!-- ================= TAB 1 : SCHEDULE ================= -->
@@ -297,11 +312,11 @@ td.pts{font-weight:700;color:var(--chalk)}
     <span class="sync" id="syncLbl">Seeded Jun 12, 2026 · pull for latest</span>
   </div>
   <div class="subtabs">
-    <button class="subtab on" data-view="fixtures">Fixtures</button>
-    <button class="subtab" data-view="live">Live &amp; Upcoming</button>
+    <button class="subtab on" data-view="live">Live &amp; Upcoming</button>
+    <button class="subtab" data-view="fixtures">Fixtures</button>
     <button class="subtab" data-view="standings">Group Standings</button>
   </div>
-  <div id="view-fixtures">
+  <div id="view-fixtures" style="display:none">
     <div class="bar">
       <select id="fStage">
         <option value="">All stages</option><option value="GS">Group stage</option>
@@ -315,7 +330,7 @@ td.pts{font-weight:700;color:var(--chalk)}
     </div>
     <div id="schedList"></div>
   </div>
-  <div id="view-live" style="display:none">
+  <div id="view-live">
     <div id="liveList"></div>
   </div>
   <div id="view-standings" style="display:none">
@@ -326,17 +341,16 @@ td.pts{font-weight:700;color:var(--chalk)}
 <!-- ================= TAB 2 : PREDICTIONS ================= -->
 <section class="pane" id="p-pred">
   <div class="note">
-    <b>How this works.</b> Each team carries an Elo-style strength rating blended from FIFA ranking, qualifying form and squad depth. Match probabilities come from a Poisson goal model; tournament odds come from <b>3,000 Monte Carlo simulations</b> of all remaining matches, run live in your browser. Confirmed results are locked in — predictions sharpen every time you pull fresh standings. The knockout bracket mapping for third-placed teams is an approximation of FIFA's allocation.
+    <b>How this works.</b> Each team carries an Elo-style rating that updates dynamically as matches are played (with host-nation advantage for USA, Canada &amp; Mexico). Match probabilities use a Dixon-Coles corrected Poisson model; tournament odds come from <b>10,000 Monte Carlo simulations</b> of all remaining matches, run live in your browser. Confirmed results are locked in — predictions sharpen every time you pull fresh standings. The knockout bracket mapping for third-placed teams is an approximation of FIFA's allocation.
   </div>
-  <div id="predOut"><div class="empty">Crunching 3,000 tournaments…</div></div>
+  <div id="predOut"><div class="empty">Crunching 10,000 tournaments…</div></div>
 </section>
 
 <!-- ================= TAB 3 : BREAKDOWN ================= -->
 <section class="pane" id="p-break">
-  <div class="note"><b>Pick any finished match</b> and the AI will research the full story — score, scorers, stats, turning points and the standout performer. Pull fresh standings on Tab 1 first so newly finished matches appear here.</div>
+  <div class="note"><b>Select any match</b> to see live lineups &amp; commentary. Full AI breakdown — including man-of-the-match — auto-generates ~30 min after the final whistle.</div>
   <div class="bar">
     <select id="bdSelect" style="flex:1;min-width:220px"></select>
-    <button class="btn gold" id="bdBtn">Generate Breakdown</button>
     <button class="btn" id="refreshCommentaryBtn" style="display:none">↻ Refresh Commentary</button>
   </div>
   <div id="bdOut"></div>
@@ -459,7 +473,7 @@ const GS=[
 ['m07','Jun 13','9:00 PM','C','HAI','SCO','GIL'],['m08','Jun 13','12:00 AM +1','D','AUS','TUR','BCP'],
 ['m09','Jun 14','1:00 PM','E','GER','CUW','NRG'],['m10','Jun 14','4:00 PM','F','NED','JPN','ATT'],
 ['m11','Jun 14','7:00 PM','E','CIV','ECU','LIN'],['m12','Jun 14','10:00 PM','F','SWE','TUN','BBV'],
-['m13','Jun 15','12:00 PM','H','ESP','CPV','MBZ'],['m14','Jun 15','3:00 PM','G','BEL','EGY','BCP'],
+['m13','Jun 15','12:00 PM','H','ESP','CPV','MBZ'],['m14','Jun 15','3:00 PM','G','BEL','EGY','LUM'],
 ['m15','Jun 15','6:00 PM','H','KSA','URU','HRD'],['m16','Jun 15','9:00 PM','G','IRN','NZL','SOF'],
 ['m17','Jun 16','3:00 PM','I','FRA','SEN','MET'],['m18','Jun 16','6:00 PM','I','IRQ','NOR','GIL'],
 ['m19','Jun 16','9:00 PM','J','ARG','ALG','ARW'],['m20','Jun 16','12:00 AM +1','J','AUT','JOR','LEV'],
@@ -516,7 +530,9 @@ let state={
   breakdowns:{},
   espnIds:{},          /* mid -> ESPN event id, incl. upcoming matches (for Squad & Formations) */
   predAnalysis:null,  /* {takes, fingerprint, ts} — cached AI write-up over the Monte Carlo odds */
-  matchPreds:{},      /* mid -> {key, takes:{anthropic,openai}, ts} — per-match AI prediction takes */
+  matchPreds:{},      /* mid -> {key, takes:{anthropic}, ts} — per-match AI prediction takes (single Claude) */
+  deepPreds:{},       /* mid -> {score, take, model, ts, key} — Serper-enriched deep prediction */
+  matchFacts:{},      /* mid -> {h2h, form, players, news, model, date} — cached facts tab content */
   lastSync:'Jun 12, 2026 (seeded)'
 };
 
@@ -526,8 +542,8 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),4200)}
 
 /* persistence via artifact storage (private to you); silently falls back to in-memory */
-async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,matchPreds:state.matchPreds,lastSync:state.lastSync}))}catch(e){}}
-async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});Object.assign(state.matchPreds,s.matchPreds||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
+async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,matchPreds:state.matchPreds,deepPreds:state.deepPreds,matchFacts:state.matchFacts,lastSync:state.lastSync}))}catch(e){}}
+async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});Object.assign(state.matchPreds,s.matchPreds||{});Object.assign(state.deepPreds,s.deepPreds||{});Object.assign(state.matchFacts,s.matchFacts||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
 
 /* IST display: fixtures are US Eastern (EDT, UTC-4) for the whole Jun 11 – Jul 19 window; IST is UTC+5:30 → fixed +9:30 shift */
 const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
@@ -555,9 +571,11 @@ function allMatches(){
 }
 const teamName=c=>TEAMS[c]?TEAMS[c].n:(c||'TBD');
 const teamFlag=c=>TEAMS[c]?TEAMS[c].f:'⏳';
+function todayIST(){return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});}
 
 /* ============ TAB 1: SCHEDULE ============ */
-function bugHTML(m){
+function bugHTML(m,opts){
+  opts=opts||{};
   const r=state.results[m.id];
   const hs=r?r.hs:null, as=r?r.as:null;
   const st=r?(r.status||'FT'):'';
@@ -567,27 +585,44 @@ function bugHTML(m){
   if(m.h&&m.a){
     /* Squad & Formations works for upcoming/live/finished alike (lineups-only, no LLM) */
     const links=[`<button data-nav="squad" data-mid="${m.id}">Squad &amp; Formations</button>`];
-    if(st!=='FT'){ /* upcoming or live: quick prediction call (cheap, SIM-independent) */
-      const p=matchProbs(m.h,m.a);
-      const fav=p.pH>=p.pA?m.h:m.a, favPct=Math.round(100*Math.max(p.pH,p.pA));
-      links.push(`<button class="pp" data-nav="pred" data-mid="${m.id}">Pred ${p.best[0]}–${p.best[1]} · ${fav} ${favPct}% →</button>`);
-    }
+    /* "Pred →" button removed — predictions merged into the Live & Upcoming full card */
     if(st==='LIVE'||st==='FT'){
       links.push(`<button data-nav="break" data-mid="${m.id}">Match Breakdown</button>`);
     }
     if(links.length)nav=`<div class="cardnav">${links.join('')}</div>`;
   }
-  /* three-way picks (⚙ stat / ◆ Claude / ● GPT) — FT matches keep showing the frozen
-     pre-match calls (cache-only lookup via data-mpredft) so they don't vanish at full time */
-  const picks=(m.h&&m.a)?picksHTML(m.id,{noPending:st==='FT'}):'';
+  /* picks only for today's matches and already-finished ones (no predictions on future dates) */
+  const showPred=m.h&&m.a&&(st==='FT'||m.iso===todayIST());
+  const picks=showPred?picksHTML(m.id,{noPending:st==='FT'}):'';
   const predAttr=picks?(st==='FT'?` data-mpredft="${m.id}"`:` data-mpred="${m.id}"`):'';
+  /* full block: tabbed Prediction / Facts — today's Live & Upcoming only */
+  let fullBlock='';
+  if(opts.full&&m.h&&m.a&&st!=='FT'&&m.iso===todayIST()){
+    const p=matchProbs(m.h,m.a);
+    const w=x=>Math.round(100*x);
+    const predPane=`${picks}
+    <div class="probbar">
+      <div class="p1" style="width:${w(p.pH)}%">${m.h} ${w(p.pH)}%</div>
+      <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
+      <div class="p2" style="width:${w(p.pA)}%">${m.a} ${w(p.pA)}%</div>
+    </div>
+    <div class="rat">${rationale(m.h,m.a,p)}</div>
+    ${deepPredHTML(m.id)}`;
+    fullBlock=`<div class="ctabs" data-mid="${m.id}">
+      <button class="ctab on" data-ctab="pred" data-mid="${m.id}">Prediction</button>
+      <button class="ctab" data-ctab="facts" data-mid="${m.id}">Facts</button>
+    </div>
+    <div class="ctabpane on" data-ctabpane="pred-${m.id}">${predPane}</div>
+    <div class="ctabpane" data-ctabpane="facts-${m.id}"><div id="mfacts-${m.id}">${factsHTML(m.id)}</div></div>`;
+  }
   return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}"${predAttr}>
     <div class="meta"><span>${tag}</span><span>${esc(m.d)} · ${esc(m.t)} IST</span><span class="st-${st}">${st==='LIVE'?'● LIVE':st}</span></div>
     <div class="row ${hw?'w':''}"><span class="fl">${teamFlag(m.h)}</span><span class="tn">${m.h?TEAMS[m.h].n:'To be decided'}<small>${m.h||''}</small></span><span class="sc">${hs??'–'}</span></div>
     <div class="row ${aw?'w':''}"><span class="fl">${teamFlag(m.a)}</span><span class="tn">${m.a?TEAMS[m.a].n:'To be decided'}<small>${m.a||''}</small></span><span class="sc">${as??'–'}</span></div>
     ${r&&r.scorers&&r.scorers.length?`<div class="scorers">${r.scorers.map(esc).join(' · ')}</div>`:''}
     <div class="venue">📍 ${m.v}</div>
-    ${picks}
+    ${fullBlock}
+    ${opts.full?'':picks}
     ${nav}
   </div>`;
 }
@@ -628,8 +663,9 @@ function renderLiveUpcoming(){
     return m.iso===todayISO;
   }).sort((a,b)=>a.ts-b.ts);
   if(!ms.length){$('#liveList').innerHTML='<div class="empty">No live or upcoming matches today.</div>';return}
-  $('#liveList').innerHTML=`<div class="day"><h3>Today</h3><span class="dn">${esc(todayLabel)}</span></div><div class="mgrid">${ms.map(bugHTML).join('')}</div>`;
-  observeMatchPreds();
+  $('#liveList').innerHTML=`<div class="day"><h3>Today</h3><span class="dn">${esc(todayLabel)}</span></div><div class="mgrid">${ms.map(m=>bugHTML(m,{full:true})).join('')}</div>`;
+  observeMatchPreds(); /* lazy-load compact picks (STAT + Claude) */
+  scheduleDeepPredsForDay(); /* batch-generate Serper-enriched deep takes for today */
 }
 function updateRail(){
   const order=['GS','R32','R16','QF','SF','F'];
@@ -653,12 +689,21 @@ function computeTable(group){
 }
 function renderStandings(){
   let html='';
+  const n=SIM?SIM.n:0;
   for(const g of 'ABCDEFGHIJKL'){
     const tbl=computeTable(g);
+    const teams=[...new Set(GS.filter(m=>m[3]===g).flatMap(m=>[m[4],m[5]]))];
+    const sorted=n?[...teams].sort((a,b)=>SIM.advCount[b]-SIM.advCount[a]):teams;
+    const qlineHTML=`<div class="odds-block">
+      <div class="odds-hd">Group Advancement Odds</div>
+      ${n?`<div class="qline">Reach KO → ${sorted.map(c=>`${teamFlag(c)} ${c} <b>${pct(SIM.advCount[c],n)}</b>`).join(' &nbsp;·&nbsp; ')}</div>
+      <div class="qline">Win group &nbsp;→ ${sorted.map(c=>`${c} <b>${pct(SIM.winGrp[c],n)}</b>`).join(' &nbsp;·&nbsp; ')}</div>`
+      :`<div class="qline" style="opacity:.4">Simulating…</div>`}
+    </div>`;
     html+=`<div class="gcard"><h4>GROUP <span>${g}</span></h4><table>
     <tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>PTS</th></tr>
     ${tbl.map((r,i)=>`<tr class="${i<2?'q':''}"><td class="t">${teamFlag(r.c)} ${TEAMS[r.c].n}</td><td>${r.p}</td><td>${r.w}</td><td>${r.dr}</td><td>${r.l}</td><td>${r.gf-r.ga>0?'+':''}${r.gf-r.ga}</td><td class="pts">${r.pts}</td></tr>`).join('')}
-    </table></div>`;
+    </table>${qlineHTML}</div>`;
   }
   $('#standList').innerHTML=html;
 }
@@ -736,6 +781,214 @@ async function fetchFacts(espnId,opts){
 function factsHaveXI(facts){
   return !!(facts&&((facts.home&&(facts.home.startingXI||[]).length)||(facts.away&&(facts.away.startingXI||[]).length)));
 }
+
+/* ---- Serper-enriched deep prediction helpers (Part 3) ---- */
+async function fetchTeamForm(code){
+  try{
+    const r=await fetch('/api/team-form?team='+encodeURIComponent(code));
+    if(r.ok)return await r.json();
+  }catch(e){}
+  return null;
+}
+async function fetchSerper(query){
+  try{
+    const r=await fetch('/api/serper',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})});
+    if(r.ok)return await r.json();
+  }catch(e){}
+  return null;
+}
+function buildSerperQuery(m){
+  const stage=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
+  return `${teamName(m.h)} vs ${teamName(m.a)} ${stage} FIFA World Cup 2026 prediction team news injuries form head-to-head`;
+}
+function buildBreakdownQuery(m){
+  const stage=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
+  return `${teamName(m.h)} vs ${teamName(m.a)} ${stage} FIFA World Cup 2026 match report result man of the match`;
+}
+function buildFactsQuery(m){
+  const stage=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
+  return `${teamName(m.h)} vs ${teamName(m.a)} ${stage} FIFA World Cup 2026 head to head history players to watch injury news squad`;
+}
+function buildFactsPrompt(m,formH,formA,serper){
+  let ctx='';
+  if(formH){const r=formH.recent.map(x=>`${x.res} vs ${x.opp} ${x.gf}-${x.ga}`).join(', ');ctx+=`\n${TEAMS[m.h].n} WC26 form: ${formH.summary}. ${r}.`}
+  if(formA){const r=formA.recent.map(x=>`${x.res} vs ${x.opp} ${x.gf}-${x.ga}`).join(', ');ctx+=`\n${TEAMS[m.a].n} WC26 form: ${formA.summary}. ${r}.`}
+  if(serper&&serper.organic&&serper.organic.length){
+    ctx+='\nWeb context:';
+    serper.organic.slice(0,6).forEach(o=>{ctx+=`\n- ${o.title}${o.date?' ('+o.date+')':''}: ${o.snippet}`});
+    if(serper.answerBox&&(serper.answerBox.answer||serper.answerBox.snippet))
+      ctx+=`\n[Answer box: ${serper.answerBox.answer||serper.answerBox.snippet}]`;
+  }
+  return `You are a football analyst. Upcoming FIFA World Cup 2026 match: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage])}, ${m.rawD}).${ctx}
+Respond ONLY with this JSON (no fences, no extra keys):
+{"h2h":"2-3 sentences on their FIFA World Cup head-to-head history — meetings, scores, notable moments. If no prior WC meetings say so.","form":{"h":["bullet on WC26 performance","bullet on goals/momentum"],"a":["bullet on WC26 performance","bullet on goals/momentum"]},"players":{"h":["Name — reason (goal threat / key role)","Name — reason"],"a":["Name — reason","Name — reason"]},"news":"1-2 sentences on latest injuries, suspensions, or squad news for both sides. If nothing notable say squads look fit."}`;
+}
+function factsHTML(mid){
+  const f=state.matchFacts[mid];
+  if(!f)return`<div class="fsec"><span class="ldg">Loading match facts…</span></div>`;
+  const m=allMatches().find(x=>x.id===mid);if(!m)return'';
+  const ul=arr=>(arr||[]).map(s=>`<li>${esc(s)}</li>`).join('');
+  return`<div>
+    <div class="fsec"><b>⚔️ Head to Head</b><p>${esc(f.h2h||'')}</p></div>
+    <div class="fsec"><b>📊 WC26 Form</b>
+      <div class="ftworow">
+        <div><h5>${esc(TEAMS[m.h].n)}</h5><ul>${ul(f.form&&f.form.h)}</ul></div>
+        <div><h5>${esc(TEAMS[m.a].n)}</h5><ul>${ul(f.form&&f.form.a)}</ul></div>
+      </div>
+    </div>
+    <div class="fsec"><b>⭐ Players to Watch</b>
+      <div class="ftworow">
+        <div><h5>${esc(TEAMS[m.h].n)}</h5><ul>${ul(f.players&&f.players.h)}</ul></div>
+        <div><h5>${esc(TEAMS[m.a].n)}</h5><ul>${ul(f.players&&f.players.a)}</ul></div>
+      </div>
+    </div>
+    <div class="fsec"><b>📰 Team News</b><p>${esc(f.news||'')}</p></div>
+    <div class="lmmodel">via Serper · ${esc(f.model||'')}</div>
+  </div>`;
+}
+async function genMatchFacts(mid){
+  const m=allMatches().find(x=>x.id===mid);if(!m||!m.h||!m.a)return;
+  /* cache is daily — stale after midnight IST */
+  const today=todayIST();
+  if(state.matchFacts[mid]&&state.matchFacts[mid].date===today){
+    /* already fresh — swap placeholder in place */
+    const el=document.getElementById('mfacts-'+mid);
+    if(el)el.innerHTML=factsHTML(mid);
+    return;
+  }
+  const[formH,formA,serper]=await Promise.all([fetchTeamForm(m.h),fetchTeamForm(m.a),fetchSerper(buildFactsQuery(m))]);
+  const prompt=buildFactsPrompt(m,formH,formA,serper);
+  let result;
+  try{result=await callLLM(prompt,false,{max_tokens:500,tier:'fast',cacheKey:'mf:'+mid+':'+today,provider:'anthropic'});}
+  catch(e){
+    const el=document.getElementById('mfacts-'+mid);
+    if(el)el.innerHTML='<div class="fsec"><span class="ldg">Could not load facts — try again later.</span></div>';
+    return;
+  }
+  if(!result||!result.text)return;
+  try{
+    const j=extractJSON(result.text);
+    state.matchFacts[mid]=Object.assign(j,{model:result.model,date:today});
+    await saveState();
+  }catch(e){return;}
+  const el=document.getElementById('mfacts-'+mid);
+  if(el)el.innerHTML=factsHTML(mid);
+}
+function deepPredKey(mid,formH,formA){
+  return 'dpred:'+mid+':'+(formH?formH.summary:'')+'|'+(formA?formA.summary:'');
+}
+function buildDeepPredPrompt(m,formH,formA,facts,serper){
+  const p=matchProbs(m.h,m.a),w=x=>Math.round(100*x);
+  const where=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
+  let prompt=`FIFA World Cup 2026, ${where}: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n}, ${m.rawD}.
+Stat model (Poisson/Elo): ${m.h} win ${w(p.pH)}%, draw ${w(p.pD)}%, ${m.a} win ${w(p.pA)}%; most likely score ${p.best[0]}-${p.best[1]}.
+${TEAMS[m.h].n} (FIFA #${TEAMS[m.h].rk}; Elo ${effElo(m.h).toFixed(0)}): ${TEAMS[m.h].note}.
+${TEAMS[m.a].n} (FIFA #${TEAMS[m.a].rk}; Elo ${effElo(m.a).toFixed(0)}): ${TEAMS[m.a].note}.`;
+  if(formH){
+    const recent=formH.recent.map(r=>`${r.res} vs ${r.opp}(${r.ha}) ${r.gf}-${r.ga}`).join(', ');
+    prompt+=`\n${TEAMS[m.h].n} recent form: ${formH.summary}. ${recent}.`;
+  }
+  if(formA){
+    const recent=formA.recent.map(r=>`${r.res} vs ${r.opp}(${r.ha}) ${r.gf}-${r.ga}`).join(', ');
+    prompt+=`\n${TEAMS[m.a].n} recent form: ${formA.summary}. ${recent}.`;
+  }
+  if(facts&&facts.home&&(facts.home.startingXI||[]).length){
+    const xi=facts.home.startingXI.slice(0,11).map(p=>p.name).join(', ');
+    prompt+=`\n${TEAMS[m.h].n} XI (${facts.home.formation||''}): ${xi}.`;
+  }
+  if(facts&&facts.away&&(facts.away.startingXI||[]).length){
+    const xi=facts.away.startingXI.slice(0,11).map(p=>p.name).join(', ');
+    prompt+=`\n${TEAMS[m.a].n} XI (${facts.away.formation||''}): ${xi}.`;
+  }
+  if(serper&&serper.organic&&serper.organic.length){
+    prompt+='\nRecent web context (team news, injuries, form, head-to-head):';
+    serper.organic.slice(0,6).forEach(o=>{
+      prompt+=`\n- ${o.title}${o.date?' ('+o.date+')':''}: ${o.snippet}`;
+    });
+    if(serper.answerBox&&(serper.answerBox.answer||serper.answerBox.snippet))
+      prompt+=`\n[Answer box: ${serper.answerBox.answer||serper.answerBox.snippet}]`;
+  }
+  prompt+=`\nGive YOUR prediction. Respond ONLY with this JSON (no fences):
+{"score":"2-1","take":"1-2 punchy sentences: who wins and the key reason"}
+"score" is ${TEAMS[m.h].n}-goals dash ${TEAMS[m.a].n}-goals.`;
+  return prompt;
+}
+function deepPredHTML(mid){
+  const dp=state.deepPreds[mid];
+  const m=allMatches().find(x=>x.id===mid);
+  if(!m)return'';
+  if(dp&&(dp.score||dp.take)){
+    const pick=dp.score?(_pickParse(m,dp.score)||dp.score):null;
+    return `<div class="aitake" id="deeppred-${mid}">
+      <div class="tk"><b>🔍 AI TAKE</b>${pick?esc(pick)+' — ':''}${esc(dp.take||'')}</div>
+      <div class="lmmodel">🔍 form · lineups · web · ${esc(dp.model||'')}</div>
+    </div>`;
+  }
+  return `<div class="aitake" id="deeppred-${mid}"><span class="ldg">🔍 analysing form, lineups &amp; latest news…</span></div>`;
+}
+
+/* deep-pred generation: one Claude call per match, Serper + ESPN context, batched ≤3 */
+const _deepBusy=new Set();let _deepQueue=[],_deepActive=0;
+function queueDeepPred(mid){
+  const m=allMatches().find(x=>x.id===mid);
+  if(!m||!m.h||!m.a)return;
+  const r=state.results[mid];
+  if(r&&r.status==='FT')return;
+  if(_deepBusy.has(mid))return;
+  _deepBusy.add(mid);_deepQueue.push(mid);drainDeepPred();
+}
+function drainDeepPred(){
+  while(_deepActive<3&&_deepQueue.length){
+    const mid=_deepQueue.shift();_deepActive++;
+    genDeepPred(mid).finally(()=>{_deepActive--;_deepBusy.delete(mid);drainDeepPred()});
+  }
+}
+function scheduleDeepPredsForDay(){
+  const ms=allMatches().filter(m=>{
+    if(!m.h||!m.a)return false;
+    const r=state.results[m.id];
+    return !(r&&r.status==='FT');
+  });
+  if(!ms.length)return;
+  /* earliest date with a non-FT match = "the day" — auto-becomes today once previous day finishes */
+  const targetDay=ms.reduce((mn,m)=>m.iso<mn?m.iso:mn,ms[0].iso);
+  ms.filter(m=>m.iso===targetDay).forEach(m=>queueDeepPred(m.id));
+}
+async function genDeepPred(mid){
+  const m=allMatches().find(x=>x.id===mid);
+  if(!m||!m.h||!m.a)return;
+  const r0=state.results[mid];
+  if(r0&&r0.status==='FT')return;
+  /* resolve ESPN event id for lineups */
+  let espnId=(r0&&r0.espnId)||state.espnIds[mid];
+  if(!espnId){try{await ensureEspnIds()}catch(e){}espnId=state.espnIds[mid];}
+  /* parallel fetch: form (×2, zero-token), lineup (zero-token), Serper search (1 request) */
+  const[formH,formA,facts,serper]=await Promise.all([
+    fetchTeamForm(m.h),fetchTeamForm(m.a),
+    espnId?fetchFacts(espnId):Promise.resolve(null),
+    fetchSerper(buildSerperQuery(m))
+  ]);
+  const key=deepPredKey(mid,formH,formA);
+  if(state.deepPreds[mid]&&state.deepPreds[mid].key===key)return; /* fresh, skip */
+  const prompt=buildDeepPredPrompt(m,formH,formA,facts,serper);
+  let result;
+  try{result=await callLLM(prompt,false,{max_tokens:180,tier:'quality',cacheKey:key,provider:'anthropic'});}
+  catch(e){return;}
+  if(!result||!result.text)return;
+  let score=null,take='';
+  try{
+    const j=extractJSON(result.text);
+    score=String(j.score||'').trim().replace(/\s/g,'');
+    if(!/^\d+-\d+$/.test(score))score=null;
+    take=String(j.take||'').trim();
+  }catch(e){take=result.text.trim();}
+  state.deepPreds[mid]={score,take,model:result.model,ts:new Date().toLocaleString(),key};
+  await saveState();
+  /* swap the placeholder in place */
+  const el=document.getElementById('deeppred-'+mid);
+  if(el)el.outerHTML=deepPredHTML(mid);
+}
+
 /* memoized map of mid -> ESPN event id, including upcoming matches (for Squad & Formations) */
 let _espnIdsPromise=null;
 async function ensureEspnIds(force){
@@ -801,6 +1054,7 @@ async function pullFresh(){
     state.lastSync=new Date().toLocaleString();
     $('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
     await saveState();
+    recomputeEff(state.results); /* update dynamic Elo before any render/matchProbs call */
     /* scoreboard fresh + interactive first; predictions recompute async in a Worker */
     renderSchedule();renderLiveUpcoming();renderStandings();renderBdSelect();
     toast(updated?('Updated '+updated+' match'+(updated>1?'es':'')+' via '+source+' ⚽'):'No new finished matches found yet');
@@ -814,8 +1068,51 @@ async function pullFresh(){
 }
 
 /* ============ TAB 2: PREDICTION ENGINE ============ */
+/* --- Part 1: dynamic Elo + host advantage --------------------------------
+   EFF[c] starts from the seed TEAMS[c].elo, gets a HOST_BONUS for home
+   nations, then is updated after each FT result via standard Elo with a
+   goal-difference multiplier. recomputeEff() is called on the main thread
+   before every render and at the start of runSims() inside the Web Worker.
+   effElo(c) is the accessor used everywhere TEAMS[c].elo was used before. */
+const HOST=new Set(['USA','CAN','MEX']);
+const HOST_BONUS=55;   /* home-nation crowd/familiarity advantage */
+let EFF={};
+function effElo(c){return EFF[c]!==undefined?EFF[c]:(TEAMS[c]?TEAMS[c].elo:1700);}
+function recomputeEff(results){
+  /* seed every team from the static rating + host bonus */
+  const eff={};
+  Object.keys(TEAMS).forEach(c=>{eff[c]=TEAMS[c].elo+(HOST.has(c)?HOST_BONUS:0)});
+  /* replay GS results in chronological order (GS is already date-ordered) */
+  const K=20;
+  for(const m of GS){
+    const r=results[m[0]];
+    if(!r||r.status!=='FT')continue;
+    const h=m[4],a=m[5];
+    if(eff[h]===undefined||eff[a]===undefined)continue;
+    const eH=eff[h],eA=eff[a];
+    const eExp=1/(1+Math.pow(10,(eA-eH)/400));
+    const gd=Math.abs(r.hs-r.as);
+    const G=Math.log(gd+1);          /* goal-difference multiplier */
+    const sH=r.hs>r.as?1:(r.hs<r.as?0:0.5);
+    eff[h]+=K*G*(sH-eExp);
+    eff[a]+=K*G*((1-sH)-(1-eExp));
+  }
+  Object.assign(EFF,eff);
+}
+/* --- Part 1b: Dixon-Coles low-score correction ---------------------------
+   Adjusts only the four (0-0, 0-1, 1-0, 1-1) cells of the Poisson grid.
+   rho < 0 increases 0-0 and 1-1 probabilities (commonly under-priced by
+   independent Poisson) and slightly deflates 0-1 and 1-0. */
+function tau(x,y,lh,la,rho){
+  if(x===0&&y===0)return 1-lh*la*rho;
+  if(x===0&&y===1)return 1+lh*rho;
+  if(x===1&&y===0)return 1+la*rho;
+  if(x===1&&y===1)return 1-rho;
+  return 1;
+}
+
 function lambdas(h,a){
-  const d=TEAMS[h].elo-TEAMS[a].elo;
+  const d=effElo(h)-effElo(a);
   const lh=Math.min(4.2,Math.max(.15,1.30*Math.exp(d/520)));
   const la=Math.min(4.2,Math.max(.15,1.30*Math.exp(-d/520)));
   return[lh,la];
@@ -823,8 +1120,9 @@ function lambdas(h,a){
 function pois(l,k){let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p}
 function matchProbs(h,a){
   const[lh,la]=lambdas(h,a);let pH=0,pD=0,pA=0,best=[0,0],bp=0;
+  const RHO=-0.05; /* Dixon-Coles correction — boosts 0-0 and 1-1, slight deflation of 0-1/1-0 */
   for(let x=0;x<=8;x++)for(let y=0;y<=8;y++){
-    const p=pois(lh,x)*pois(la,y);
+    const p=pois(lh,x)*pois(la,y)*tau(x,y,lh,la,RHO);
     if(x>y)pH+=p;else if(x<y)pA+=p;else pD+=p;
     if(p>bp){bp=p;best=[x,y]}
   }
@@ -873,6 +1171,7 @@ function simulateOnce(){
 }
 let SIM=null;
 function runSims(n){
+  recomputeEff(state.results); /* update dynamic Elo before simulating */
   const title={},finals={},finalPair={},advCount={},winGrp={};
   Object.keys(TEAMS).forEach(c=>{title[c]=0;finals[c]=0;advCount[c]=0;winGrp[c]=0});
   for(let i=0;i<n;i++){
@@ -895,7 +1194,7 @@ function predFingerprint(){
 }
 function rationale(h,a,p){
   const dH=TEAMS[h],dA=TEAMS[a];
-  const gap=dH.elo-dA.elo;
+  const gap=effElo(h)-effElo(a); /* uses live-adjusted Elo, not frozen seed */
   const fav=gap>=0?h:a, dog=gap>=0?a:h, ag=Math.abs(gap);
   let edge;
   if(ag<40)edge='a genuine coin-flip — rating gap under 40 points';
@@ -924,54 +1223,14 @@ function renderPredictions(){
     <div class="obarw"><div class="obar" style="width:${Math.max(2,100*v/mx)}%"></div><span class="onm" style="color:${v/mx>.25?'#04130C':'var(--chalk)'}">${TEAMS[c].n}</span></div>
     <span class="opc">${pct(SIM.title[c],n)}</span></div>`;
   });
-  html+='</div><div class="secl">Group-by-group: advancement odds &amp; match calls</div>';
+  /* per-match prediction cards removed — match-wise AI takes now live in the
+     Live & Upcoming tab (Serper-enriched deep takes on each match card). */
+  html+='</div><div class="secl">Group-by-group: advancement odds</div>';
   for(const g of 'ABCDEFGHIJKL'){
     const teams=[...new Set(GS.filter(m=>m[3]===g).flatMap(m=>[m[4],m[5]]))];
     teams.sort((x,y)=>SIM.advCount[y]-SIM.advCount[x]);
     html+=`<div class="pgroup"><h3>GROUP <span>${g}</span></h3>
-    <div class="qline">Reach the knockouts → ${teams.map(c=>`${teamFlag(c)} ${c} <b>${pct(SIM.advCount[c],n)}</b>`).join(' &nbsp;·&nbsp; ')}<br>Win the group → ${teams.map(c=>`${c} ${pct(SIM.winGrp[c],n)}`).join(' · ')}</div>`;
-    for(const m of GS.filter(m=>m[3]===g)){
-      const r=state.results[m[0]];
-      if(r&&r.status==='FT'){
-        html+=`<div class="pcard" id="pc-${m[0]}" data-mpredft="${m[0]}"><div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} ${r.hs}–${r.as} ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely" style="color:var(--green)">FINAL — locked into the model</span></div>${aitakeFTHTML(m[0])}</div>`;
-        continue;
-      }
-      const p=matchProbs(m[4],m[5]);
-      const w=x=>Math.round(100*x);
-      html+=`<div class="pcard" id="pc-${m[0]}" data-mpred="${m[0]}">
-      <div class="ph"><span class="ms">${teamFlag(m[4])} ${TEAMS[m[4]].n} vs ${TEAMS[m[5]].n} ${teamFlag(m[5])}</span><span class="likely">most likely: ${p.best[0]}–${p.best[1]} · ${fmtIST(m[1],m[2]).date}</span></div>
-      <div class="probbar">
-        <div class="p1" style="width:${w(p.pH)}%">${m[4]} ${w(p.pH)}%</div>
-        <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
-        <div class="p2" style="width:${w(p.pA)}%">${m[5]} ${w(p.pA)}%</div>
-      </div>
-      ${picksHTML(m[0])}
-      <div class="rat">${rationale(m[4],m[5],p)}</div>${aitakeHTML(m[0])}</div>`;
-    }
-    html+='</div>';
-  }
-  /* knockout match calls — only fixtures whose pairings are known (state.koTeams) */
-  const koms=allMatches().filter(m=>m.stage!=='GS'&&m.h&&m.a);
-  if(koms.length){
-    html+='<div class="secl">Knockout match calls</div>';
-    for(const m of koms){
-      const r=state.results[m.id];
-      if(r&&r.status==='FT'){
-        html+=`<div class="pcard" id="pc-${m.id}" data-mpredft="${m.id}"><div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely" style="color:var(--green)">${esc(m.label||STAGE_NAME[m.stage])} · FINAL</span></div>${aitakeFTHTML(m.id)}</div>`;
-        continue;
-      }
-      const p=matchProbs(m.h,m.a);
-      const w=x=>Math.round(100*x);
-      html+=`<div class="pcard" id="pc-${m.id}" data-mpred="${m.id}">
-      <div class="ph"><span class="ms">${teamFlag(m.h)} ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} ${teamFlag(m.a)}</span><span class="likely">${esc(m.label||STAGE_NAME[m.stage])} · most likely: ${p.best[0]}–${p.best[1]} · ${m.d}</span></div>
-      <div class="probbar">
-        <div class="p1" style="width:${w(p.pH)}%">${m.h} ${w(p.pH)}%</div>
-        <div class="px" style="width:${w(p.pD)}%">✕ ${w(p.pD)}%</div>
-        <div class="p2" style="width:${w(p.pA)}%">${m.a} ${w(p.pA)}%</div>
-      </div>
-      ${picksHTML(m.id)}
-      <div class="rat">${rationale(m.h,m.a,p)}</div>${aitakeHTML(m.id)}</div>`;
-    }
+    <div class="qline">Reach the knockouts → ${teams.map(c=>`${teamFlag(c)} ${c} <b>${pct(SIM.advCount[c],n)}</b>`).join(' &nbsp;·&nbsp; ')}<br>Win the group → ${teams.map(c=>`${c} ${pct(SIM.winGrp[c],n)}`).join(' · ')}</div></div>`;
   }
   const sfNames=rank.slice(0,4);
   html+=`<div class="secl">Projected road to MetLife — July 19</div>
@@ -992,7 +1251,6 @@ function renderPredictions(){
     <div style="text-align:center;margin-top:10px"><button id="predAnalysisBtn" class="btn gold">${paHTML?(fresh?'↻ Regenerate AI Analysis':'✨ Update AI Analysis'):'✨ Generate AI Analysis'}</button></div>
   </div>`;
   $('#predOut').innerHTML=html;
-  observeMatchPreds(); /* lazy-generate per-match AI takes as cards scroll into view */
 }
 /* prompt for the cheap-tier AI write-up over the current Monte Carlo odds */
 function buildPredAnalysisPrompt(){
@@ -1080,13 +1338,15 @@ function picksHTML(mid,opts){
   if(!m||!m.h||!m.a)return'';
   const p=matchProbs(m.h,m.a);
   const stat=p.best[0]+'–'+p.best[1]+' '+(p.best[0]>p.best[1]?m.h:(p.best[1]>p.best[0]?m.a:'draw'));
-  const parts=[`<span class="pk" title="stat model (Poisson)"><b>⚙ STAT</b>${stat}</span>`];
+  const parts=[`<span class="pk" title="stat model (Poisson/Elo)"><b>⚙ STAT</b>${stat}</span>`];
   const c=state.matchPreds[mid];
-  for(const prov of['anthropic','openai']){
-    const t=c&&c.takes&&c.takes[prov];
-    const pick=t&&t.score?_pickParse(m,t.score):null;
-    if(pick)parts.push(`<span class="pk gold" title="${LM_NAME[prov]}"><b>${LM_LABEL[prov]}</b>${pick}</span>`);
-    else if(!opts.noPending)parts.push(`<span class="pk dim" title="${LM_NAME[prov]}"><b>${LM_LABEL[prov]}</b>…</span>`);
+  /* prefer deep pred score (quality tier + Serper) so ◆ CLAUDE matches 🔍 AI TAKE */
+  const dp=state.deepPreds[mid];
+  const t=c&&c.takes&&c.takes.anthropic;
+  const pick=dp&&dp.score?_pickParse(m,dp.score):(t&&t.score?_pickParse(m,t.score):null);
+  if(!opts.noClaudePick){
+    if(pick)parts.push(`<span class="pk gold" title="Claude"><b>◆ CLAUDE</b>${pick}</span>`);
+    else if(!opts.noPending)parts.push(`<span class="pk dim" title="Claude"><b>◆ CLAUDE</b>…</span>`);
   }
   return `<div class="aipicks" data-aipicks="${mid}">${parts.join('<span class="sep">·</span>')}</div>`;
 }
@@ -1126,32 +1386,31 @@ async function genMatchPred(mid,ft){
   const m=allMatches().find(x=>x.id===mid);
   const r0=state.results[mid];
   if(!ft&&r0&&r0.status==='FT')return; /* match ended between render and intersect — never generate post-hoc */
-  /* FT: reconstruct the pre-match key (exclude the match's own result) and do a
-     cache-only lookup — another user may have generated it pre-match; never generate */
+  /* FT: reconstruct the pre-match key and do a cache-only lookup — never generate after the fact */
   const key=matchPredKey(mid,ft);
   if(!m||!key)return;
+  let rLLM=null;
   try{
-    const both=await callBothLLMs(buildMatchPredPrompt(m),{max_tokens:180,cacheKey:key,cacheOnly:!!ft});
-    const takes={};
-    for(const prov of['anthropic','openai']){
-      const r=both[prov];
-      if(!r||!r.text)continue;
-      try{ /* structured {score,take}; prose fallback if a model ignores the JSON ask */
-        const j=extractJSON(r.text);
-        const sc=String(j.score||'').trim();
-        takes[prov]={score:/^\d+\s*-\s*\d+$/.test(sc)?sc.replace(/\s/g,''):null,take:String(j.take||'').trim(),model:r.model};
-      }catch(e){takes[prov]={text:r.text.trim(),model:r.model}}
-    }
-    if(!Object.keys(takes).length){
-      if(ft){state.matchPreds[mid]={key,none:true};await saveState()} /* tombstone: ask the server once, ever */
-      return; /* upcoming: placeholder stays, retried on next view */
-    }
-    state.matchPreds[mid]={key,takes,ts:new Date().toLocaleString()};
-    await saveState();
-  }catch(e){return}
+    rLLM=await callLLM(buildMatchPredPrompt(m),false,{max_tokens:180,tier:'fast',cacheKey:key,cacheOnly:!!ft,provider:'anthropic'});
+  }catch(e){
+    if(ft){state.matchPreds[mid]={key,none:true};await saveState()} /* tombstone */
+    return;
+  }
+  if(!rLLM||!rLLM.text){
+    if(ft){state.matchPreds[mid]={key,none:true};await saveState()}
+    return;
+  }
+  const takes={};
+  try{
+    const j=extractJSON(rLLM.text);
+    const sc=String(j.score||'').trim();
+    takes.anthropic={score:/^\d+\s*-\s*\d+$/.test(sc)?sc.replace(/\s/g,''):null,take:String(j.take||'').trim(),model:rLLM.model};
+  }catch(e){takes.anthropic={text:rLLM.text.trim(),model:rLLM.model}}
+  state.matchPreds[mid]={key,takes,ts:new Date().toLocaleString()};
+  await saveState();
   const el=document.getElementById('aitake-'+mid);
   if(el)el.outerHTML=ft?aitakeFTHTML(mid):aitakeHTML(mid);
-  /* refresh every picks row for this match (schedule card + predictions card) */
+  /* refresh every picks row for this match (schedule card + live card) */
   document.querySelectorAll(`[data-aipicks="${mid}"]`).forEach(p=>{p.outerHTML=picksHTML(mid,{noPending:!!ft})});
 }
 let _mpredObserver=null;
@@ -1171,14 +1430,18 @@ function ensurePredWorker(){
   if(predWorkerBroken||typeof Worker==='undefined')return null;
   try{
     const eloMap={};Object.keys(TEAMS).forEach(c=>eloMap[c]={elo:TEAMS[c].elo});
-    const src='const TEAMS='+JSON.stringify(eloMap)+';\nconst GS='+JSON.stringify(GS)+';\nlet state={};\nlet SIM=null;\n'+
-      [pois,lambdas,samplePois,matchProbs,simulateOnce,runSims].map(f=>f.toString()).join('\n')+
+    /* HOST/HOST_BONUS/EFF are needed by effElo and recomputeEff — injected as literal strings
+       since they're not functions (can't use .toString()). tau/effElo/recomputeEff are in the
+       function list so they get serialized alongside lambdas/matchProbs/runSims. */
+    const src='const TEAMS='+JSON.stringify(eloMap)+';\nconst GS='+JSON.stringify(GS)+
+      ';\nconst HOST=new Set(["USA","CAN","MEX"]);\nconst HOST_BONUS=55;\nlet EFF={};\nlet state={};\nlet SIM=null;\n'+
+      [tau,effElo,recomputeEff,pois,lambdas,samplePois,matchProbs,simulateOnce,runSims].map(f=>f.toString()).join('\n')+
       '\nonmessage=e=>{state.results=e.data.results;runSims(e.data.n);postMessage({gen:e.data.gen,SIM});};';
     predBlobUrl=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
     predWorker=new Worker(predBlobUrl);
     predWorker.onmessage=e=>{
       if(e.data.gen!==predGen)return; /* stale job — a newer pull superseded it */
-      SIM=e.data.SIM;predUpdatedAt=new Date();renderPredictions();
+      SIM=e.data.SIM;predUpdatedAt=new Date();renderPredictions();renderStandings();
     };
     predWorker.onerror=()=>{
       try{predWorker.terminate()}catch(_){}
@@ -1190,23 +1453,39 @@ function ensurePredWorker(){
 }
 function schedulePredictionsInline(){
   clearTimeout(simTimer);
-  simTimer=setTimeout(()=>{runSims(3000);predUpdatedAt=new Date();renderPredictions()},60);
+  /* 3,000 runs on the main thread (avoids jank); Worker path uses 10k */
+  simTimer=setTimeout(()=>{runSims(3000);predUpdatedAt=new Date();renderPredictions();renderStandings();},60);
 }
 function schedulePredictions(){
-  $('#predOut').innerHTML='<div class="empty">Crunching 3,000 tournaments…</div>';
+  $('#predOut').innerHTML='<div class="empty">Crunching 10,000 tournaments…</div>';
   predGen++;
   const w=ensurePredWorker();
   if(!w){schedulePredictionsInline();return}
-  w.postMessage({results:state.results,n:3000,gen:predGen});
+  w.postMessage({results:state.results,n:10000,gen:predGen});
 }
 
 /* ============ TAB 3: MATCH BREAKDOWN ============ */
 function finishedMatches(){return allMatches().filter(m=>{const r=state.results[m.id];return r&&r.status==='FT'&&m.h&&m.a})}
 function renderBdSelect(){
-  const sel=$('#bdSelect');const fin=finishedMatches();
-  if(!fin.length){sel.innerHTML='<option value="">No finished matches yet — pull fresh standings first</option>';return}
-  sel.innerHTML=fin.map(m=>{const r=state.results[m.id];
-    return `<option value="${m.id}">${m.d} — ${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n} (${m.stage==='GS'?'Group '+m.g:m.label||STAGE_NAME[m.stage]})</option>`}).join('');
+  const sel=$('#bdSelect');
+  /* show only live and finished matches (no upcoming), newest first */
+  const ms=[...allMatches()].filter(m=>{
+    if(!m.h||!m.a)return false;
+    const r=state.results[m.id];
+    return r&&(r.status==='LIVE'||r.status==='FT');
+  }).sort((a,b)=>b.ts-a.ts);
+  if(!ms.length){sel.innerHTML='<option value="">No matches available yet</option>';return}
+  const curVal=sel.value;
+  sel.innerHTML=ms.map(m=>{
+    const r=state.results[m.id]||{};
+    let label;
+    if(r.status==='FT') label=`${TEAMS[m.h].n} ${r.hs}–${r.as} ${TEAMS[m.a].n}`;
+    else if(r.status==='LIVE') label=`${TEAMS[m.h].n} vs ${TEAMS[m.a].n} 🔴 LIVE`;
+    else label=`${TEAMS[m.h].n} vs ${TEAMS[m.a].n} · ${m.t}`;
+    const stage=m.stage==='GS'?'Group '+m.g:(m.label||STAGE_NAME[m.stage]);
+    return `<option value="${m.id}">${m.d} — ${label} (${stage})</option>`;
+  }).join('');
+  if(curVal&&ms.find(m=>m.id===curVal))sel.value=curVal;
 }
 /* live play-by-play (ESPN, newest first) — shown only mid-match; free, no LLM */
 function renderCommentaryHTML(commentary){
@@ -1267,8 +1546,8 @@ function renderBreakdown(m,b,opts){
     ${opts.note?`<div class="bdnote">${esc(opts.note)}</div>`:''}
     <div class="secl" style="text-align:center">${meta}</div>
     <h3>${teamFlag(m.h)} ${TEAMS[m.h].n} &nbsp;vs&nbsp; ${TEAMS[m.a].n} ${teamFlag(m.a)}</h3>
-    <div class="fsc">${esc(b.score||'')}</div>
-    ${b.scorers&&b.scorers.length?`<div class="gl" style="text-align:center">⚽ ${b.scorers.map(esc).join('<br>⚽ ')}</div>`:''}
+    <div class="fsc" id="bd-score">${esc(b.score||'')}</div>
+    <div class="gl" id="bd-scorers" style="text-align:center">${b.scorers&&b.scorers.length?'⚽ '+b.scorers.map(esc).join('<br>⚽ '):''}</div>
     ${b.summary?`<p class="summ">${esc(b.summary)}</p>`:''}
     ${lineups}
     ${statsHTML}
@@ -1280,12 +1559,17 @@ function renderBreakdown(m,b,opts){
 }
 let curLiveBdId=null; /* match id of the live breakdown currently shown (drives "Refresh Commentary") */
 async function genBreakdown(forceId){
-  const id=forceId||$('#bdSelect').value;if(!id){toast('No finished matches to break down yet',true);return}
+  const id=forceId||$('#bdSelect').value;if(!id)return;
   const m=allMatches().find(x=>x.id===id);if(!m)return;
   const res0=state.results[id]||{};
+
+  /* ---- NOT FT: show live/upcoming lineups + commentary (no LLM, nothing cached) ---- */
   if(res0.status!=='FT'){
-    /* live (or otherwise unfinished): ESPN facts only — no narrative call, nothing cached */
     curLiveBdId=null;$('#refreshCommentaryBtn').style.display='none';
+    if(!res0.status){
+      /* upcoming — no data yet */
+      $('#bdOut').innerHTML='<div class="empty">Match hasn\'t kicked off yet — lineups and live commentary will appear here once it starts.</div>';return;
+    }
     $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Fetching live lineups &amp; stats…</div>';
     let espnId=res0.espnId;
     if(!espnId){try{await ensureEspnIds()}catch(e){} espnId=state.espnIds[id]}
@@ -1298,18 +1582,49 @@ async function genBreakdown(forceId){
     if(res0.status==='LIVE'&&espnId){curLiveBdId=id;$('#refreshCommentaryBtn').style.display=''}
     return;
   }
+
+  /* ---- FT: check cache first (cached breakdown always loads instantly) ---- */
   curLiveBdId=null;$('#refreshCommentaryBtn').style.display='none';
   if(state.breakdowns[id]){renderBreakdown(m,state.breakdowns[id]);toast('Loaded saved breakdown');return}
-  const btn=$('#bdBtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Researching…';
-  $('#bdOut').innerHTML='<div class="empty">Pulling lineups &amp; stats, then researching the story…</div>';
+
+  /* ---- FT: 30-min gate — show latest ESPN facts + commentary while waiting ---- */
+  const isKO=m.stage!=='GS';
+  const availAt=m.ts+(isKO?210:150)*60000; /* kickoff + ~FT duration + 30min buffer */
+  if(Date.now()<availAt){
+    $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Fetching match data…</div>';
+    let espnId=res0.espnId;
+    if(!espnId){try{await ensureEspnIds()}catch(e){} espnId=state.espnIds[id]}
+    const facts=espnId?await fetchFacts(espnId):null;
+    const b=Object.assign({},facts||{});
+    if(res0.hs!=null)b.score=res0.hs+'-'+res0.as;
+    if((!b.scorers||!b.scorers.length)&&res0.scorers)b.scorers=res0.scorers;
+    if(facts){
+      renderBreakdown(m,b,{note:'🕑 Full breakdown — including man-of-the-match — unlocks ~30 min after full time. Check back shortly.'});
+    }else{
+      $('#bdOut').innerHTML='<div class="empty">🕑 Full breakdown — including man-of-the-match — unlocks ~30 min after full time. Check back shortly.</div>';
+    }
+    return;
+  }
+
+  /* ---- FT + past gate: auto-generate GPT breakdown with Serper match-report context ---- */
+  $('#bdOut').innerHTML='<div class="empty"><span class="spin"></span> Researching the full story — man of the match, turning points, tactics…</div>';
   const res=res0;
-  /* ESPN structured facts first (when we know the event id) */
-  let facts=res.espnId?await fetchFacts(res.espnId):null;
-  /* LLM narrative — when ESPN facts exist, generate from them alone (no web search:
-     it's the dominant token cost and the facts already tell the full story); the
-     server-side cacheKey means each match's narrative is generated once globally.
-     Web search is kept only for the rare finished match ESPN has no data for. */
-  let narrative=null,claudeErr=null;
+  /* parallel: ESPN structured facts + Serper match report */
+  let espnId=res.espnId;
+  if(!espnId){try{await ensureEspnIds()}catch(e){} espnId=state.espnIds[id];}
+  const[facts,serper]=await Promise.all([
+    espnId?fetchFacts(espnId):Promise.resolve(null),
+    fetchSerper(buildBreakdownQuery(m))
+  ]);
+  /* build reusable Serper context block (man-of-the-match awards, press reports) */
+  let serperBlock='';
+  if(serper&&serper.organic&&serper.organic.length){
+    serperBlock='\nRecent web context (match reports, man-of-the-match — use for mvp and color; never contradict verified facts):';
+    serper.organic.slice(0,6).forEach(o=>{serperBlock+=`\n- ${o.title}${o.date?' ('+o.date+')':''}: ${o.snippet}`});
+    if(serper.answerBox&&(serper.answerBox.answer||serper.answerBox.snippet))
+      serperBlock+=`\n[Answer box: ${serper.answerBox.answer||serper.answerBox.snippet}]`;
+  }
+  let narrative=null,genErr=null;
   try{
     let prompt;
     const where=(m.stage==='GS'?'Group '+m.g:STAGE_NAME[m.stage])+', played '+m.rawD+' 2026 at '+m.v.replace(/&amp;/g,'&');
@@ -1320,32 +1635,26 @@ async function genBreakdown(forceId){
         stats:facts.stats,
         key_events:(facts.events||[]).map(ev=>ev.min+' '+ev.type+': '+ev.text)};
       prompt=`Here are verified facts for the FIFA World Cup 2026 match ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}):
-${JSON.stringify(ground)}
-Using ONLY these facts, respond with ONLY a JSON object, no other text or fences:
-{"summary":"3-4 sentence narrative of how the match unfolded, in your own words","turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)","tactical":"2-3 sentences on the tactical battle — formations, pressing, key matchups"}
-Keep it concise and consistent with the facts above.`;
-      /* both providers' takes (cached once each globally) — viewers can flip between them */
-      const both=await callBothLLMs(prompt,{max_tokens:600,cacheKey:'bd:'+res.espnId});
-      const narratives={};
-      for(const prov of['anthropic','openai']){
-        const r=both[prov];if(!r)continue;
-        try{narratives[prov]=Object.assign(extractJSON(r.text),{model:r.model})}catch(e){}
-      }
-      if(Object.keys(narratives).length)narrative={narratives};
-      else throw new Error('No provider returned a usable narrative');
+${JSON.stringify(ground)}${serperBlock}
+Use the verified facts above for the match narrative; you may use the web context for the man-of-the-match and narrative color — but never contradict the verified facts. Respond with ONLY a JSON object, no other text or fences:
+{"summary":"3-4 sentence narrative of how the match unfolded, in your own words","turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)","tactical":"2-3 sentences on the tactical battle — formations, pressing, key matchups"}`;
+      /* single GPT call — cached globally by espnId+provider */
+      const r=await callLLM(prompt,false,{max_tokens:600,cacheKey:'bd:'+res.espnId,provider:'openai'});
+      if(!r||!r.text)throw new Error('No response from GPT');
+      narrative={narratives:{openai:Object.assign(extractJSON(r.text),{model:r.model})}};
     }else{
-      prompt=`Search the web for the full match report of the FIFA World Cup 2026 game: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}).
+      /* rare: no ESPN facts — rely on Serper snippets + GPT web search */
+      prompt=`Find the full match report for the FIFA World Cup 2026 game: ${TEAMS[m.h].n} vs ${TEAMS[m.a].n} (${where}).${serperBlock}
 Respond with ONLY a JSON object, no other text or fences:
 {"score":"2-1","scorers":["Name (TEAM) 23'"],"summary":"3-4 sentence narrative of how the match unfolded, in your own words","stats":{"possession":"58% - 42%","shots":"14 - 6","shots_on_target":"6 - 2","xG":"1.9 - 0.4"},"turning_points":["moment 1","moment 2","moment 3"],"mvp":"Player Name (Team)"}
-Keep everything concise and factual from the latest reports.`;
-      const r=await callLLM(prompt,true); /* rare no-facts fallback: single provider, legacy flat shape */
+Keep everything concise and factual.`;
+      const r=await callLLM(prompt,true,{provider:'openai',max_tokens:600});
       narrative=extractJSON(r.text);
     }
-  }catch(e){claudeErr=e}
-  if(!facts&&!narrative){ /* neither source delivered — existing error UI */
-    $('#bdOut').innerHTML='<div class="empty">Couldn\'t complete the research — '+esc(claudeErr?claudeErr.message:'no data')+'.<br>Give it another try.</div>';
-    toast('Breakdown failed: '+(claudeErr?claudeErr.message:'no data'),true);
-    btn.disabled=false;btn.textContent='Generate Breakdown';
+  }catch(e){genErr=e}
+  if(!facts&&!narrative){
+    $('#bdOut').innerHTML='<div class="empty">Couldn\'t complete the research — '+esc(genErr?genErr.message:'no data')+'.<br>Give it another try in a moment.</div>';
+    toast('Breakdown failed: '+(genErr?genErr.message:'no data'),true);
     return;
   }
   const b=Object.assign({},facts||{},narrative||{});
@@ -1354,7 +1663,6 @@ Keep everything concise and factual from the latest reports.`;
   state.breakdowns[id]=b;await saveState();
   renderBreakdown(m,b);
   toast(narrative?'Breakdown ready 📋':'Facts loaded — narrative unavailable right now');
-  btn.disabled=false;btn.textContent='Generate Breakdown';
 }
 /* re-fetches just the ESPN play-by-play for the live match currently shown and
    swaps the "Live commentary" timeline in place — bypasses the 60s server cache
@@ -1367,9 +1675,23 @@ async function refreshCommentary(){
   const btn=$('#refreshCommentaryBtn');btn.disabled=true;const orig=btn.textContent;btn.textContent='Refreshing…';
   try{
     const facts=await fetchFacts(espnId,{fresh:true});
+    if(!facts){toast('Could not refresh commentary',true);return}
     const el=$('#bd-commentary');
-    if(facts&&el)el.innerHTML=renderCommentaryHTML(facts.commentary);
-    else if(!facts)toast('Could not refresh commentary',true);
+    if(el)el.innerHTML=renderCommentaryHTML(facts.commentary);
+    /* score comes directly from ESPN match summary — always fresh, no pullFresh needed */
+    const scoreEl=$('#bd-score');
+    if(scoreEl&&facts.hs!=null)scoreEl.textContent=facts.hs+'-'+facts.as;
+    const scorersEl=$('#bd-scorers');
+    if(scorersEl){
+      const sc=facts.scorers&&facts.scorers.length?facts.scorers:[];
+      scorersEl.innerHTML=sc.length?'⚽ '+sc.map(esc).join('<br>⚽ '):'';
+    }
+    /* keep state.results in sync so the rest of the UI reflects the latest score */
+    if(facts.hs!=null){
+      const cur=state.results[curLiveBdId]||{};
+      state.results[curLiveBdId]=Object.assign({},cur,{hs:facts.hs,as:facts.as,scorers:facts.scorers||cur.scorers||[]});
+      await saveState();
+    }
   }finally{btn.disabled=false;btn.textContent=orig}
 }
 
@@ -1379,12 +1701,6 @@ function activateTab(paneId){
   $$('.pane').forEach(p=>p.classList.toggle('on',p.id===paneId));
 }
 function flashCard(el){el.classList.remove('pc-flash');void el.offsetWidth;el.classList.add('pc-flash');setTimeout(()=>el.classList.remove('pc-flash'),1700)}
-function goToPrediction(mid){
-  activateTab('p-pred');
-  const el=document.getElementById('pc-'+mid);
-  if(el){el.scrollIntoView({behavior:'smooth',block:'center'});flashCard(el)}
-  else{$('#predOut').scrollIntoView({behavior:'smooth',block:'start'});if(!SIM)schedulePredictions()}
-}
 async function goToBreakdown(mid){
   activateTab('p-break');
   $('#bdSelect').value=mid;
@@ -1421,7 +1737,15 @@ async function showSquad(mid){
 function init(){
   const gsel=$('#fGroup');
   for(const g of 'ABCDEFGHIJKL'){const o=document.createElement('option');o.value=g;o.textContent='Group '+g;gsel.appendChild(o)}
-  $$('.tab').forEach(t=>t.addEventListener('click',()=>activateTab(t.dataset.pane)));
+  $$('.tab').forEach(t=>t.addEventListener('click',()=>{
+    activateTab(t.dataset.pane);
+    if(t.dataset.pane==='p-break'){
+      /* auto-select the live match if one is in progress */
+      const liveMatch=allMatches().find(m=>state.results[m.id]&&state.results[m.id].status==='LIVE');
+      if(liveMatch)$('#bdSelect').value=liveMatch.id;
+      genBreakdown();
+    }
+  }));
   $$('.subtab').forEach(t=>t.addEventListener('click',()=>{
     $$('.subtab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
     $('#view-fixtures').style.display=t.dataset.view==='fixtures'?'':'none';
@@ -1431,7 +1755,7 @@ function init(){
   ['fStage','fGroup','fDate'].forEach(i=>$('#'+i).addEventListener('change',renderSchedule));
   $('#fTeam').addEventListener('input',renderSchedule);
   $('#refreshBtn').addEventListener('click',pullFresh);
-  $('#bdBtn').addEventListener('click',()=>genBreakdown());
+  $('#bdSelect').addEventListener('change',()=>genBreakdown());
   $('#refreshCommentaryBtn').addEventListener('click',refreshCommentary);
   /* Claude/GPT take toggle — delegated because the containers are innerHTML-swapped */
   const lmToggle=e=>{
@@ -1448,14 +1772,23 @@ function init(){
   const cardNavClick=e=>{
     const b=e.target.closest('[data-nav]');if(!b)return;
     const mid=b.dataset.mid;
-    if(b.dataset.nav==='pred')goToPrediction(mid);
-    else if(b.dataset.nav==='squad')showSquad(mid);
+    if(b.dataset.nav==='squad')showSquad(mid);
     else goToBreakdown(mid);
   };
   $('#schedList').addEventListener('click',cardNavClick);
-  $('#liveList').addEventListener('click',cardNavClick);
+  $('#liveList').addEventListener('click',e=>{
+    cardNavClick(e);
+    /* card-level Prediction / Facts tab switcher */
+    const tab=e.target.closest('.ctab');if(!tab)return;
+    const mid=tab.dataset.mid;const pane=tab.dataset.ctab;
+    const card=tab.closest('.bug');if(!card)return;
+    card.querySelectorAll('.ctab').forEach(t=>t.classList.toggle('on',t===tab));
+    card.querySelectorAll('.ctabpane').forEach(p=>p.classList.toggle('on',p.dataset.ctabpane===pane+'-'+mid));
+    if(pane==='facts')genMatchFacts(mid);
+  });
   loadState().then(()=>{
     if(state.lastSync&&!state.lastSync.includes('seeded'))$('#syncLbl').innerHTML='Last synced <b>'+esc(state.lastSync)+'</b>';
+    recomputeEff(state.results); /* initialise dynamic Elo from any cached FT results */
     renderSchedule();renderLiveUpcoming();renderStandings();renderBdSelect();schedulePredictions();
     pullFresh(); /* auto-sync on open — cached state renders instantly above, then live scores land on top */
   });

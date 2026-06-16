@@ -23,6 +23,7 @@ OPENAI_FAST_MODEL = os.environ.get("OPENAI_FAST_MODEL", "gpt-4.1-mini")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 ANTHROPIC_FAST_MODEL = os.environ.get("ANTHROPIC_FAST_MODEL", "claude-haiku-4-5-20251001")
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
 
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world"
 # FIFA's own public feed (powers fifa.com) — used as a fallback when ESPN is down.
@@ -32,13 +33,15 @@ FIFA_SEASON = "285023"
 FIFA_COMPETITION = "17"
 FIFA_HEADERS = {"User-Agent": "Mozilla/5.0"}
 DEFAULT_DATES = "20260611-20260719"
-CACHE_TTL = 60  # seconds
+CACHE_TTL = 60          # seconds — short-lived scoreboard/match data
+FORM_CACHE_TTL = 3600   # seconds — team recent-form (changes at most hourly)
+SERPER_CACHE_TTL = 3 * 3600  # seconds — web search results valid for 3h
 _cache = {}  # key -> (timestamp, payload)
 
 
-def _cache_get(key):
+def _cache_get(key, ttl=None):
     hit = _cache.get(key)
-    if hit and (time.time() - hit[0]) < CACHE_TTL:
+    if hit and (time.time() - hit[0]) < (ttl if ttl is not None else CACHE_TTL):
         return hit[1]
     return None
 
@@ -261,6 +264,20 @@ def _normalize_fifa(data, include_upcoming=False):
     return matches
 
 
+# ESPN team-id map — verified 2026-06-15 via /sports/soccer/fifa.world/teams?limit=60
+ESPN_TEAM_IDS = {
+    "ALG": 624,  "ARG": 202,  "AUS": 628,  "AUT": 474,  "BEL": 459,
+    "BIH": 452,  "BRA": 205,  "CAN": 206,  "CPV": 2597, "COL": 208,
+    "COD": 2850, "CRO": 477,  "CUW": 11678,"CZE": 450,  "ECU": 209,
+    "EGY": 2620, "ENG": 448,  "FRA": 478,  "GER": 481,  "GHA": 4469,
+    "HAI": 2654, "IRN": 469,  "IRQ": 4375, "CIV": 4789, "JPN": 627,
+    "JOR": 2917, "MEX": 203,  "MAR": 2869, "NED": 449,  "NZL": 2666,
+    "NOR": 464,  "PAN": 2659, "PAR": 210,  "POR": 482,  "QAT": 4398,
+    "KSA": 655,  "SCO": 580,  "SEN": 654,  "RSA": 467,  "KOR": 451,
+    "ESP": 164,  "SWE": 466,  "SUI": 475,  "TUN": 659,  "TUR": 465,
+    "USA": 660,  "URU": 212,  "UZB": 2570,
+}
+
 with open("static/index.html") as f:
     INDEX_HTML = f.read()
 
@@ -435,6 +452,106 @@ async def standings(dates: str = DEFAULT_DATES, upcoming: bool = False):
     return payload
 
 
+@app.get("/api/team-form")
+async def team_form(team: str):
+    """Zero-token recent form from ESPN's team schedule.
+    Returns {code, summary, recent[6]} — each entry {date,opp,ha,gf,ga,res}.
+    summary e.g. 'W3 D1 L1 · GF9 GA4 (last 6)'. Cached 1h (form changes slowly)."""
+    code = team.upper().strip()
+    espn_id = ESPN_TEAM_IDS.get(code)
+    if not espn_id:
+        raise HTTPException(404, f"Unknown team code: {code}")
+    key = f"team-form:{code}"
+    cached = _cache_get(key, ttl=FORM_CACHE_TTL)
+    if cached is not None:
+        return cached
+    url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/{espn_id}/schedule"
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        raise HTTPException(502, f"ESPN team schedule fetch failed: {e}")
+    recent, w, d, l, gf, ga = [], 0, 0, 0, 0, 0
+    for e in data.get("events", []):
+        comp = (e.get("competitions") or [{}])[0]
+        if not (((comp.get("status") or {}).get("type") or {}).get("completed")):
+            continue
+        competitors = comp.get("competitors") or []
+        mine = next((x for x in competitors
+                     if (x.get("team") or {}).get("abbreviation", "").upper() == code), None)
+        opp = next((x for x in competitors if x is not mine), None)
+        if not mine or not opp:
+            continue
+        ms_str = (mine.get("score") or {}).get("displayValue")
+        os_str = (opp.get("score") or {}).get("displayValue")
+        if ms_str is None or os_str is None:
+            continue
+        ms, os_ = int(float(ms_str)), int(float(os_str))
+        res = "W" if ms > os_ else ("L" if ms < os_ else "D")
+        recent.append({
+            "date": e.get("date", "")[:10],
+            "opp": (opp.get("team") or {}).get("abbreviation", ""),
+            "ha": mine.get("homeAway", ""),
+            "gf": ms, "ga": os_, "res": res,
+        })
+        if len(recent) <= 6:
+            if res == "W": w += 1
+            elif res == "D": d += 1
+            else: l += 1
+            gf += ms; ga += os_
+    recent = recent[:6]
+    summary = (f"W{w} D{d} L{l} · GF{gf} GA{ga} (last {len(recent)})"
+               if recent else "no recent results")
+    payload = {"code": code, "summary": summary, "recent": recent}
+    _cache_set(key, payload)
+    return payload
+
+
+@app.post("/api/serper")
+async def serper_search(request: Request):
+    """Web search via Serper.dev — returns trimmed organic results + answer box.
+    If SERPER_API_KEY is unset returns {organic:[]} so callers degrade gracefully.
+    Cached 3h per query string."""
+    body = await request.json()
+    q = str(body.get("q", "")).strip()
+    if not q:
+        raise HTTPException(400, "Missing query q")
+    if not SERPER_API_KEY:
+        return {"organic": []}  # key not configured — degrade silently, never 500
+    key = f"serper:{q}"
+    cached = _cache_get(key, ttl=SERPER_CACHE_TTL)
+    if cached is not None:
+        return cached
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.post(
+                "https://google.serper.dev/search",
+                json={"q": q, "num": 10, "gl": "us", "hl": "en"},
+                headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+            )
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        raise HTTPException(502, f"Serper search failed: {e}")
+    # Trim to token-bounded shape: top 6 organic + optional answer/knowledge
+    organic = [
+        {"title": o.get("title", ""), "snippet": o.get("snippet", ""),
+         "date": o.get("date", ""), "link": o.get("link", "")}
+        for o in (data.get("organic") or [])[:6]
+    ]
+    payload: dict = {"organic": organic}
+    ab = data.get("answerBox") or {}
+    if ab.get("answer") or ab.get("snippet"):
+        payload["answerBox"] = {"answer": ab.get("answer", ""), "snippet": ab.get("snippet", "")}
+    kg = data.get("knowledgeGraph") or {}
+    if kg.get("description"):
+        payload["knowledgeGraph"] = {"description": kg["description"]}
+    _cache_set(key, payload)
+    return payload
+
+
 def _normalize_match(data):
     info = {}
     gi = data.get("gameInfo") or {}
@@ -452,12 +569,22 @@ def _normalize_match(data):
     comp = (hdr.get("competitions") or [{}])[0]
     info["date"] = comp.get("date") or ""
 
-    # team id -> abbreviation map (from header competitors)
+    # team id -> abbreviation map (from header competitors); also extract live score
     idmap = {}
+    live_hs, live_as = None, None
     for c in comp.get("competitors") or []:
         tm = c.get("team") or {}
         if tm.get("id"):
             idmap[str(tm.get("id"))] = (tm.get("abbreviation") or "").upper()
+        raw_score = c.get("score")
+        try:
+            score_val = int(raw_score) if raw_score is not None else None
+        except (ValueError, TypeError):
+            score_val = None
+        if c.get("homeAway") == "home":
+            live_hs = score_val
+        elif c.get("homeAway") == "away":
+            live_as = score_val
 
     def _roster_side(side):
         for ros in data.get("rosters") or []:
@@ -556,6 +683,12 @@ def _normalize_match(data):
         if txt:
             commentary.append({"min": mn, "text": txt})
 
+    # live score from header (None when match hasn't started)
+    comp_status = comp.get("status") or {}
+    status_type = (comp_status.get("type") or {}).get("name") or ""
+    live_status = "LIVE" if status_type == "STATUS_IN_PROGRESS" else (
+        "FT" if status_type in ("STATUS_FINAL", "STATUS_FULL_TIME") else "")
+
     return {
         "info": info,
         "home": home,
@@ -564,6 +697,9 @@ def _normalize_match(data):
         "events": events,
         "scorers": scorers,
         "commentary": commentary,
+        "hs": live_hs,
+        "as": live_as,
+        "liveStatus": live_status,
     }
 
 
