@@ -308,6 +308,105 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkchamp .cpct{font-family:var(--mono);font-size:11px;color:var(--gold)}
 .brkchamp .cnote{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px}
 
+/* ---------- leaderboards ---------- */
+@keyframes lbGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes lbPop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes lbFadeUp{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@keyframes lbPulse{50%{opacity:.35}}
+@keyframes lbShimmer{from{background-position:-200px 0}to{background-position:200px 0}}
+.lb-grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:680px){.lb-grid{grid-template-columns:1fr 1fr}.lb-full{grid-column:1/-1}}
+.lb-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 18px}
+.lb-hd{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:space-between}
+.lb-hero{position:relative;overflow:hidden;border:1px solid #5a5226;border-radius:18px;padding:24px 22px;
+  box-shadow:0 8px 30px rgba(239,201,76,.10);
+  background:radial-gradient(circle at 82% 120%,rgba(239,201,76,.20),transparent 58%),linear-gradient(120deg,#16210f,#101F17);
+  animation:lbFadeUp .5s ease}
+.lb-hero .deco{position:absolute;top:-30px;right:-10px;font-size:150px;opacity:.06;pointer-events:none}
+.lb-hero .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.26em;color:var(--gold);text-transform:uppercase}
+.lb-hero .body{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:14px;margin-top:10px}
+.lb-hero .pflag{font-size:34px}
+.lb-hero .pname{font-family:'Archivo Black',sans-serif;font-size:30px;line-height:1.05}
+.lb-hero .psub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+.lb-hero .statnum{font-family:'Archivo Black',sans-serif;font-size:58px;color:var(--gold);line-height:1;text-align:right}
+.lb-hero .statunit{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+.lb-pips{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+.lb-pip{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;
+  background:radial-gradient(circle at 35% 30%,#ffe9a8,#EFC94C 60%,#b9952e);box-shadow:0 2px 6px rgba(239,201,76,.3);
+  animation:lbPop .4s ease both}
+.lb-teamrow{display:flex;align-items:center;gap:10px;margin-bottom:15px}
+.lb-teamrow:last-child{margin-bottom:0}
+.lb-teamrow .fl{font-size:18px;width:22px;flex-shrink:0;text-align:center}
+.lb-teamrow .body{flex:1;min-width:0}
+.lb-teamrow .lbl{display:flex;justify-content:space-between;font-family:'Archivo',sans-serif;font-weight:600;font-size:12.5px;margin-bottom:4px}
+.lb-teamrow .lbl .n{font-family:var(--mono);font-weight:600;font-size:12px;color:#7BE0A8}
+.lb-teamrow.top .lbl,.lb-teamrow.top .lbl .n{color:var(--gold)}
+.lb-track{background:#0a1610;border-radius:5px;height:8px;overflow:hidden}
+.lb-track .fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--green),#7BE0A8);transform-origin:left;animation:lbGrow .8s cubic-bezier(.2,.8,.2,1) both}
+.lb-teamrow.top .lb-track .fill{background:linear-gradient(90deg,var(--gold),#ffe9a8)}
+.lb-scorerrow{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #18301f}
+.lb-scorerrow:last-child{border-bottom:none}
+.lb-scorerrow .rk{font-family:var(--mono);font-weight:600;font-size:12px;color:var(--muted);width:24px;flex-shrink:0}
+.lb-scorerrow.r1 .rk{color:var(--gold)}
+.lb-scorerrow .fl{font-size:16px;flex-shrink:0}
+.lb-scorerrow .nm{font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-dots{display:flex;gap:3px;flex-shrink:0}
+.lb-dots span{width:9px;height:9px;border-radius:50%;background:var(--green)}
+.lb-scorerrow.r1 .lb-dots span{background:var(--gold)}
+.lb-scorerrow .ct{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--gold);width:20px;text-align:right;flex-shrink:0}
+.lb-more{text-align:center;margin-top:10px}
+.lb-more button{background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--blue);text-transform:uppercase}
+.lb-disc-body{display:flex;flex-wrap:wrap;gap:22px;align-items:center}
+.lb-donut{width:130px;height:130px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;position:relative}
+.lb-donut::after{content:'';position:absolute;inset:13px;border-radius:50%;background:var(--panel)}
+.lb-donut .ctr{position:relative;z-index:1;text-align:center}
+.lb-donut .ctr .n{font-family:'Archivo Black',sans-serif;font-size:26px}
+.lb-donut .ctr .k{font-family:var(--mono);font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.lb-disc-side{flex:1;min-width:200px}
+.lb-pie-row{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.lb-donut.sm{width:104px;height:104px}
+.lb-donut.sm::after{inset:10px}
+.lb-legend{flex:1;min-width:160px;display:flex;flex-direction:column;gap:7px}
+.lb-legend-row{display:flex;align-items:center;gap:7px;font-size:12px}
+.lb-legend-row .sw{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.lb-legend-row .fl{font-size:13px;flex-shrink:0}
+.lb-legend-row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--chalk);font-family:'Archivo',sans-serif;font-weight:600}
+.lb-legend-row .ct{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
+.lb-tiles{display:flex;gap:12px;margin-bottom:16px}
+.lb-tile{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;align-items:center;gap:10px}
+.lb-tile .sw{width:15px;height:20px;border-radius:3px;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,.3)}
+.lb-tile.yellow .sw{background:var(--gold);box-shadow:0 2px 5px rgba(239,201,76,.3)}
+.lb-tile.red .sw{background:var(--red);box-shadow:0 2px 5px rgba(232,71,76,.3)}
+.lb-tile .v{font-family:'Archivo Black',sans-serif;font-size:28px;line-height:1}
+.lb-tile.yellow .v{color:var(--gold)}
+.lb-tile.red .v{color:var(--red)}
+.lb-tile .k{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-top:2px}
+.lb-booked-hd{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;margin-bottom:9px}
+.lb-bookedrow{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.lb-bookedrow:last-child{margin-bottom:0}
+.lb-bookedrow .fl{font-size:14px;flex-shrink:0}
+.lb-bookedrow .nm{font-family:'Archivo',sans-serif;font-weight:600;font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-cardglyphs{display:flex;gap:3px;flex-shrink:0}
+.lb-cardglyphs span{width:9px;height:13px;border-radius:2px;display:inline-block}
+.lb-loading{display:flex;align-items:center;gap:8px;margin-top:14px;font-family:var(--mono);font-size:9.5px;color:#5d7568}
+.lb-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);animation:lbPulse 1.5s ease-in-out infinite;flex-shrink:0}
+.lb-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(90,169,230,.1);border:1px solid rgba(90,169,230,.3);border-radius:20px;padding:5px 11px;font-family:var(--mono);font-size:9.5px;color:var(--blue)}
+.lb-motmrow{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:11px;background:var(--panel-2);border:1px solid var(--line);margin-bottom:9px}
+.lb-motmrow:last-child{margin-bottom:0}
+.lb-motmrow.r1{background:radial-gradient(circle at 90% 50%,rgba(239,201,76,.12),transparent 60%),var(--panel-2);border-color:#5a5226}
+.lb-motmrow .rk{font-family:var(--mono);font-weight:600;font-size:12px;color:var(--muted);width:20px;flex-shrink:0}
+.lb-motmrow.r1 .rk{color:var(--gold)}
+.lb-motmrow .fl{font-size:16px;flex-shrink:0}
+.lb-motmrow .nm{font-family:'Archivo',sans-serif;font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-stars{flex-shrink:0;font-size:15px;filter:drop-shadow(0 1px 2px rgba(239,201,76,.4))}
+.lb-skel{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:11px;border:1px dashed var(--line)}
+.lb-skel .rk{font-family:var(--mono);color:var(--muted);width:20px;flex-shrink:0}
+.lb-skel .blk{height:16px;border-radius:4px;background:linear-gradient(90deg,#15291E,#1d3829,#15291E);background-size:200px 100%;animation:lbShimmer 1.3s linear infinite}
+.lb-skel .blk.a{width:24px;flex-shrink:0}
+.lb-skel .blk.b{flex:1}
+.lb-skel .pending{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;flex-shrink:0}
+.lb-foot{text-align:center;font-family:var(--mono);font-size:10px;color:#3d5246;letter-spacing:.08em;margin-top:8px}
+
 @media(max-width:560px){
   .tab{font-size:11px;padding:10px 4px}
   .mgrid{grid-template-columns:1fr}
@@ -316,6 +415,11 @@ td.pts{font-weight:700;color:var(--chalk)}
   .brkcol,.brkch{min-width:130px}
   .brkheaders,.brkgrid{gap:18px}
   .brkrow .bn{font-size:11px}
+  .lb-hero .statnum{font-size:42px}
+  .lb-hero .body{flex-direction:column;align-items:flex-start}
+  .lb-hero .statnum,.lb-hero .statunit{text-align:left}
+  .lb-hero .deco{font-size:110px}
+  .lb-donut{width:104px;height:104px}
 }
 </style>
 </head>
@@ -337,6 +441,7 @@ td.pts{font-weight:700;color:var(--chalk)}
   <button class="tab on" role="tab" data-pane="p-sched"><span class="n">TAB 01</span>Schedules &amp; Scores</button>
   <button class="tab" role="tab" data-pane="p-break"><span class="n">TAB 02</span>Match Breakdown</button>
   <button class="tab" role="tab" data-pane="p-pred"><span class="n">TAB 03</span>Predictions</button>
+  <button class="tab" role="tab" data-pane="p-lb"><span class="n">TAB 04</span>Leaderboards</button>
 </nav>
 
 <!-- ================= TAB 1 : SCHEDULE ================= -->
@@ -378,6 +483,12 @@ td.pts{font-weight:700;color:var(--chalk)}
     <b>How this works.</b> Each team carries an Elo-style rating that updates dynamically as matches are played (with host-nation advantage for USA, Canada &amp; Mexico). Match probabilities use a Dixon-Coles corrected Poisson model; tournament odds come from <b>10,000 Monte Carlo simulations</b> of all remaining matches, run live in your browser. Confirmed results are locked in — predictions sharpen every time you pull fresh standings. The knockout bracket mapping for third-placed teams is an approximation of FIFA's allocation.
   </div>
   <div id="predOut"><div class="empty">Crunching 10,000 tournaments…</div></div>
+</section>
+
+<!-- ================= TAB 4 : LEADERBOARDS ================= -->
+<section class="pane" id="p-lb">
+  <div class="note"><b>Tournament leaders.</b> Goals and team totals update instantly from live scores; card detail compiles briefly after a match ends; Player of the Match is an AI judgment per finished match and fills in progressively — aggregates from finished matches only, no live in-match updates.</div>
+  <div id="lbOut"><div class="empty">Loading leaderboards…</div></div>
 </section>
 
 <!-- ================= TAB 3 : BREAKDOWN ================= -->
@@ -793,6 +904,199 @@ function renderStandings(){
     </table>${qlineHTML}</div>`;
   }
   $('#standList').innerHTML=html;
+}
+
+/* ============ TAB 4: LEADERBOARDS ============
+   Pure render off whatever /api/leaderboards last returned — the endpoint itself is
+   cheap/instant (just the persisted aggregate); all the real work (ESPN card detail,
+   Serper+LLM Player-of-the-Match judgments) happens server-side, gated to run only
+   when a match has actually finished. See app.py's _process_new_matches. */
+let LB_DATA=null, lbScorersExpanded=false;
+function lbHeroHTML(scorers){
+  const top=scorers&&scorers[0];
+  if(!top)return`<div class="lb-card lb-hero lb-full"><div class="deco">👟</div><div class="eyebrow">🥇 GOLDEN BOOT — LEADER</div><div class="body"><div><div class="pflag">⏳</div><div class="pname">No goals yet</div></div></div></div>`;
+  const pips=Array.from({length:Math.min(top.goals,20)},(_,i)=>`<div class="lb-pip" style="animation-delay:${(i*0.06).toFixed(2)}s">⚽</div>`).join('');
+  return`<div class="lb-card lb-hero lb-full">
+    <div class="deco">👟</div>
+    <div class="eyebrow">🥇 GOLDEN BOOT — LEADER</div>
+    <div class="body">
+      <div><div class="pflag">${teamFlag(top.team)}</div><div class="pname">${esc(top.player)}</div><div class="psub">${TEAMS[top.team]?TEAMS[top.team].n.toUpperCase():top.team}</div></div>
+      <div><div class="statnum">${top.goals}</div><div class="statunit">GLS</div></div>
+    </div>
+    <div class="lb-pips">${pips}</div>
+  </div>`;
+}
+const LB_PIE_COLORS=['var(--gold)','var(--green)','var(--blue)','#7BE0A8','#c97fe0'];
+function lbTeamsPieHTML(teamGoals){
+  if(!teamGoals||!teamGoals.length)return'';
+  const total=teamGoals.reduce((s,t)=>s+t.goals,0);
+  if(!total)return'';
+  const top5=teamGoals.slice(0,5);
+  const othersGoals=total-top5.reduce((s,t)=>s+t.goals,0);
+  const slices=top5.map((t,i)=>({label:TEAMS[t.team]?TEAMS[t.team].n:t.team,flag:teamFlag(t.team),goals:t.goals,color:LB_PIE_COLORS[i]}));
+  if(othersGoals>0)slices.push({label:'Other teams',flag:'🌍',goals:othersGoals,color:'var(--muted)'});
+  let acc=0;
+  const stops=slices.map(s=>{
+    const a=Math.round(360*acc/total);acc+=s.goals;const b=Math.round(360*acc/total);
+    return `${s.color} ${a}deg ${b}deg`;
+  }).join(', ');
+  const legend=slices.map(s=>`<div class="lb-legend-row"><span class="sw" style="background:${s.color}"></span><span class="fl">${s.flag}</span><span class="nm">${esc(s.label)}</span><span class="ct">${s.goals}</span></div>`).join('');
+  return`<div class="lb-pie-row">
+    <div class="lb-donut sm" style="background:conic-gradient(${stops})"><div class="ctr"><div class="n">${total}</div><div class="k">Total Goals</div></div></div>
+    <div class="lb-legend">${legend}</div>
+  </div>`;
+}
+function lbTeamsHTML(teamGoals){
+  if(!teamGoals||!teamGoals.length)return`<div class="empty" style="padding:20px 0">No goals yet</div>`;
+  const top=teamGoals.slice(0,8);
+  const max=top[0].goals||1;
+  return top.map(t=>`<div class="lb-teamrow${t.rank===1?' top':''}">
+    <span class="fl">${teamFlag(t.team)}</span>
+    <div class="body">
+      <div class="lbl"><span>${TEAMS[t.team]?TEAMS[t.team].n:t.team}</span><span class="n">${t.goals}</span></div>
+      <div class="lb-track"><div class="fill" style="width:${Math.max(4,Math.round(100*t.goals/max))}%"></div></div>
+    </div>
+  </div>`).join('');
+}
+function lbScorersBarHTML(scorers){
+  if(!scorers||!scorers.length)return'';
+  const top=scorers.slice(0,6);
+  const max=top[0].goals||1;
+  const rows=top.map(s=>`<div class="lb-teamrow${s.rank===1?' top':''}">
+    <span class="fl">${teamFlag(s.team)}</span>
+    <div class="body">
+      <div class="lbl"><span>${esc(s.player)}</span><span class="n">${s.goals}</span></div>
+      <div class="lb-track"><div class="fill" style="width:${Math.max(4,Math.round(100*s.goals/max))}%"></div></div>
+    </div>
+  </div>`).join('');
+  return`<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line)">${rows}</div>`;
+}
+function lbScorersHTML(scorers){
+  if(!scorers||!scorers.length)return`<div class="empty" style="padding:20px 0">No goals yet</div>`;
+  const shown=lbScorersExpanded?scorers:scorers.slice(0,12);
+  const rows=shown.map(s=>{
+    const dots=Array.from({length:Math.min(s.goals,5)}).map(()=>'<span></span>').join('');
+    return`<div class="lb-scorerrow${s.rank===1?' r1':''}">
+      <span class="rk">${s.rank}</span><span class="fl">${teamFlag(s.team)}</span>
+      <span class="nm">${esc(s.player)}</span>
+      <span class="lb-dots">${dots}</span>
+      <span class="ct">${s.goals}</span>
+    </div>`;
+  }).join('');
+  const more=(!lbScorersExpanded&&scorers.length>12)
+    ?`<div class="lb-more"><button data-lb="showAllScorers">SHOW ALL ${scorers.length} SCORERS →</button></div>`:'';
+  return rows+more;
+}
+function lbDisciplineHTML(cards){
+  const{totalYellow,totalRed,mostBooked,teamCards,compilingCount}=cards;
+  const total=totalYellow+totalRed;
+  const yDeg=total?Math.round(360*totalYellow/total):0;
+  const donutBg=total?`conic-gradient(var(--gold) 0deg ${yDeg}deg, var(--red) ${yDeg}deg 360deg)`:'var(--panel-2)';
+  const bookedRows=(mostBooked||[]).slice(0,8).map(p=>{
+    const glyphs=[...Array(p.yellow).fill('var(--gold)'),...Array(p.red).fill('var(--red)')]
+      .map(c=>`<span style="background:${c}"></span>`).join('');
+    return`<div class="lb-bookedrow"><span class="fl">${teamFlag(p.team)}</span><span class="nm">${esc(p.player)}</span><span class="lb-cardglyphs">${glyphs}</span></div>`;
+  }).join('')||'<div class="empty" style="padding:8px 0;font-size:12px">No cards yet</div>';
+  const teamCardsTop=(teamCards||[]).slice(0,8);
+  const teamMax=Math.max(1,...teamCardsTop.map(t=>t.yellow+t.red));
+  const teamRows=teamCardsTop.map(t=>{
+    const names=t.players.map(p=>esc(p.player)).join(', ');
+    const yw=Math.round(100*t.yellow/teamMax), rw=Math.round(100*t.red/teamMax);
+    return`<div class="lb-teamrow">
+      <span class="fl">${teamFlag(t.team)}</span>
+      <div class="body">
+        <div class="lbl"><span>${TEAMS[t.team]?TEAMS[t.team].n:t.team} <span style="color:var(--muted);font-size:10px">— ${names}</span></span><span class="n" style="color:var(--chalk)">${t.yellow+t.red}</span></div>
+        <div class="lb-track" style="display:flex"><div style="height:100%;background:var(--gold);width:${yw}%"></div><div style="height:100%;background:var(--red);width:${rw}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+  const loading=compilingCount>0
+    ?`<div class="lb-loading"><span class="lb-dot"></span>COMPILING CARD DETAIL FROM ${compilingCount} RECENT MATCH${compilingCount>1?'ES':''}…</div>`:'';
+  return`<div class="lb-card lb-full">
+    <div class="lb-hd"><span>🟨 DISCIPLINARY RECORD</span></div>
+    <div class="lb-disc-body">
+      <div class="lb-donut" style="background:${donutBg}"><div class="ctr"><div class="n">${total}</div><div class="k">Total Cards</div></div></div>
+      <div class="lb-disc-side">
+        <div class="lb-tiles">
+          <div class="lb-tile yellow"><span class="sw"></span><div><div class="v">${totalYellow}</div><div class="k">Yellow Cards</div></div></div>
+          <div class="lb-tile red"><span class="sw"></span><div><div class="v">${totalRed}</div><div class="k">Red Cards</div></div></div>
+        </div>
+        <div class="lb-booked-hd">Most Booked</div>
+        ${bookedRows}
+        ${teamRows?`<div class="lb-booked-hd" style="margin-top:16px">By Team</div>${teamRows}`:''}
+      </div>
+    </div>
+    ${loading}
+  </div>`;
+}
+function lbMotmTeamDonutHTML(list){
+  if(!list||!list.length)return'';
+  const byTeam={};
+  list.forEach(m=>{byTeam[m.team]=(byTeam[m.team]||0)+m.awards});
+  const teams=Object.entries(byTeam).map(([team,awards])=>({team,awards})).sort((a,b)=>b.awards-a.awards);
+  const total=teams.reduce((s,t)=>s+t.awards,0);
+  if(!total)return'';
+  const top5=teams.slice(0,5);
+  const othersAwards=total-top5.reduce((s,t)=>s+t.awards,0);
+  const slices=top5.map((t,i)=>({label:TEAMS[t.team]?TEAMS[t.team].n:t.team,flag:teamFlag(t.team),awards:t.awards,color:LB_PIE_COLORS[i]}));
+  if(othersAwards>0)slices.push({label:'Other teams',flag:'🌍',awards:othersAwards,color:'var(--muted)'});
+  let acc=0;
+  const stops=slices.map(s=>{
+    const a=Math.round(360*acc/total);acc+=s.awards;const b=Math.round(360*acc/total);
+    return `${s.color} ${a}deg ${b}deg`;
+  }).join(', ');
+  const legend=slices.map(s=>`<div class="lb-legend-row"><span class="sw" style="background:${s.color}"></span><span class="fl">${s.flag}</span><span class="nm">${esc(s.label)}</span><span class="ct">${s.awards}</span></div>`).join('');
+  return`<div class="lb-pie-row">
+    <div class="lb-donut sm" style="background:conic-gradient(${stops})"><div class="ctr"><div class="n">${total}</div><div class="k">MOTM Awards</div></div></div>
+    <div class="lb-legend">${legend}</div>
+  </div>`;
+}
+function lbMotmHTML(motm){
+  const list=motm.list||[], pendingMatches=motm.pendingMatches||0;
+  const rows=list.slice(0,10).map(m=>{
+    const stars='⭐'.repeat(Math.min(m.awards,5));
+    return`<div class="lb-motmrow${m.rank===1?' r1':''}"><span class="rk">${m.rank}</span><span class="fl">${teamFlag(m.team)}</span><span class="nm">${esc(m.player)}</span><span class="lb-stars">${stars}</span></div>`;
+  }).join('');
+  const empty=(!rows&&!pendingMatches)?'<div class="empty" style="padding:8px 0;font-size:12px">No matches finished yet</div>':'';
+  const skeleton=pendingMatches>0?`<div class="lb-skel"><span class="rk">—</span><span class="blk a"></span><span class="blk b"></span><span class="pending">Pending</span></div>`:'';
+  const pill=pendingMatches>0?`<span class="lb-pill"><span class="lb-dot"></span>STILL TALLYING ${pendingMatches} MATCH${pendingMatches>1?'ES':''}…</span>`:'';
+  return`<div class="lb-card lb-full">
+    <div class="lb-hd"><span>⭐ PLAYER OF THE MATCH TALLY</span>${pill}</div>
+    ${lbMotmTeamDonutHTML(list)}
+    ${rows}${empty}
+    ${skeleton}
+  </div>`;
+}
+function renderLeaderboards(){
+  if(!LB_DATA){$('#lbOut').innerHTML='<div class="empty">Loading leaderboards…</div>';return}
+  const d=LB_DATA;
+  $('#lbOut').innerHTML=`
+    ${lbHeroHTML(d.scorers)}
+    <div class="lb-grid">
+      <div class="lb-card"><div class="lb-hd"><span>🥅 TOP SCORING TEAMS</span></div>${lbTeamsPieHTML(d.teamGoals)}${lbTeamsHTML(d.teamGoals)}</div>
+      <div class="lb-card"><div class="lb-hd"><span>👟 GOLDEN BOOT RACE</span></div>${lbScorersBarHTML(d.scorers)}${lbScorersHTML(d.scorers)}</div>
+      ${lbDisciplineHTML(d.cards)}
+      ${lbMotmHTML(d.motm)}
+    </div>
+    <div class="lb-foot">AGGREGATES FROM FINISHED MATCHES ONLY · NO LIVE IN-MATCH UPDATES</div>`;
+}
+async function fetchLeaderboards(){
+  try{
+    const r=await fetch('/api/leaderboards');
+    if(r.ok)LB_DATA=await r.json();
+  }catch(e){}
+  renderLeaderboards();
+}
+/* light polling only while the Leaderboards tab is open AND the page is visible — so
+   a progressively-resolving MOTM tally ticks up without hammering the endpoint from a
+   backgrounded/closed tab */
+let _lbPollTimer=null;
+function startLbPolling(){
+  stopLbPolling();
+  _lbPollTimer=setInterval(()=>{if(document.visibilityState==='visible')fetchLeaderboards();},20000);
+}
+function stopLbPolling(){
+  if(_lbPollTimer){clearInterval(_lbPollTimer);_lbPollTimer=null}
 }
 
 /* ============ AI REFRESH (Pull Fresh Standings) ============ */
@@ -1481,7 +1785,7 @@ function brkRow(team,node){
   const cls='brkrow'+(node.winner?(isWin?' win':' lose'):'');
   const flag=(node.played&&isWin)?`<span class="brkflag ${node.correct?'ok':'no'}">${node.correct?'✓':'✗'}</span>`:'';
   const pctTxt=prob!=null?Math.round(prob*100)+'%':'';
-  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><span class="bn">${esc(TEAMS[team].n)}</span>${flag}<span class="bp">${pctTxt}</span></div>`;
+  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><span class="bn">${TEAMS[team].n}</span>${flag}<span class="bp">${pctTxt}</span></div>`;
 }
 function brkNode(node){
   return`<div class="brknode${node.played?' played':''}">${brkRow(node.a,node)}${brkRow(node.b,node)}</div>`;
@@ -1494,7 +1798,7 @@ function renderBracket(){
      an extra item and throw off the vertical centering math for every round. */
   const col=nodes=>`<div class="brkcol">${nodes.map(brkNode).join('')}</div>`;
   const champHTML=champ
-    ?`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">${teamFlag(champ)}</div><div class="cname">${esc(TEAMS[champ].n)}</div><div class="cpct">title in ${pct(SIM.title[champ],SIM.n)} of all sims</div></div>`
+    ?`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">${teamFlag(champ)}</div><div class="cname">${TEAMS[champ].n}</div><div class="cpct">title in ${pct(SIM.title[champ],SIM.n)} of all sims</div></div>`
     :`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">⏳</div><div class="cname">TBD</div><div class="cnote">awaiting the Round of 16</div></div>`;
   return`<div class="secl">Projected bracket — the chalk path</div>
   <div class="brkhint">SWIPE TO FOLLOW THE PATH →</div>
@@ -2045,6 +2349,8 @@ function init(){
     if(t.dataset.pane==='p-sched'&&$('.subtab[data-view="fixtures"]').classList.contains('on')){
       requestAnimationFrame(scrollScheduleToToday);
     }
+    if(t.dataset.pane==='p-lb'){fetchLeaderboards();startLbPolling()}
+    else{stopLbPolling()}
   }));
   $$('.subtab').forEach(t=>t.addEventListener('click',()=>{
     $$('.subtab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
@@ -2069,6 +2375,9 @@ function init(){
   $('#predOut').addEventListener('click',e=>{
     if(e.target.id==='predAnalysisBtn'){genPredAnalysis();return}
     lmToggle(e);
+  });
+  $('#lbOut').addEventListener('click',e=>{
+    if(e.target.closest('[data-lb="showAllScorers"]')){lbScorersExpanded=true;renderLeaderboards()}
   });
   const cardNavClick=e=>{
     const b=e.target.closest('[data-nav]');if(!b)return;

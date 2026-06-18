@@ -236,6 +236,90 @@ def _persist_visitors():
             pass
 
 
+# Leaderboards aggregate (goals/cards/Player-of-the-Match) — built incrementally as
+# matches finish, never recomputed from scratch. Same load-from-dataset/local-file-wins/
+# debounced-upload pattern as the narrative and visitor caches above, so it survives
+# restarts and HF Space redeploys.
+LEADERBOARD_CACHE_FILE = "leaderboard_cache.json"
+# Bump this whenever the goals/cards/MOTM extraction logic changes in a way that could
+# make already-"processed" matches wrong (e.g. the own-goal-credit fix below) — a stale
+# cache would otherwise serve incorrect totals forever, since processed matches are
+# never revisited. A version bump wipes the processed/tally state so everything gets
+# recomputed cleanly from the (now-correct) source data on the next standings pull.
+LEADERBOARD_SCHEMA_VERSION = 2  # v2: fixed own-goal credit direction (was inverted)
+_LEADERBOARD_DEFAULTS = {
+    "schemaVersion": LEADERBOARD_SCHEMA_VERSION,
+    "processedGoalsMatchIds": [],   # espnId list — goals already folded into teamGoals/scorerTally
+    "teamGoals": {},                # team code -> int
+    "scorerTally": {},              # "Player|TEAM" -> {player, team, goals}
+    "processedCardsMatchIds": [],   # espnId list — card events already folded into playerCards
+    "playerCards": {},              # "Player|TEAM" -> {player, team, yellow, red}
+    "processedMotmMatchIds": [],    # espnId list — MOTM resolved and folded into motmTally
+    "motmPendingMatchIds": [],      # espnId list — FT, queued for MOTM, not yet resolved
+    "motmTally": {},                # "Player|TEAM" -> {player, team, awards}
+    "lastFtFingerprint": "",        # sorted FT espnIds joined — gates the background refresh
+}
+
+
+def _load_leaderboard():
+    data = {}
+    if CACHE_DATASET and HF_TOKEN:
+        try:
+            from huggingface_hub import hf_hub_download
+            p = hf_hub_download(repo_id=CACHE_DATASET, repo_type="dataset",
+                                filename=LEADERBOARD_CACHE_FILE, token=HF_TOKEN)
+            with open(p) as f:
+                data.update(json.load(f))
+        except Exception:
+            pass
+    try:
+        with open(LEADERBOARD_CACHE_FILE) as f:
+            data.update(json.load(f))  # local file wins (newer than last upload)
+    except Exception:
+        pass
+    if data.get("schemaVersion") != LEADERBOARD_SCHEMA_VERSION:
+        data = {}  # stale extraction logic — discard and recompute from scratch
+    for k, v in _LEADERBOARD_DEFAULTS.items():
+        data.setdefault(k, json.loads(json.dumps(v)))  # deep-copy the default
+    return data
+
+
+_leaderboard: dict = _load_leaderboard()
+_leaderboard_upload_task = None
+_leaderboard_task = None  # in-flight guard — only one background aggregation pass at a time
+
+
+async def _upload_leaderboard_soon():
+    global _leaderboard_upload_task
+    await asyncio.sleep(20)
+    _leaderboard_upload_task = None
+    try:
+        from huggingface_hub import HfApi
+        await asyncio.to_thread(
+            HfApi(token=HF_TOKEN).upload_file,
+            path_or_fileobj=LEADERBOARD_CACHE_FILE,
+            path_in_repo=LEADERBOARD_CACHE_FILE,
+            repo_id=CACHE_DATASET, repo_type="dataset",
+            commit_message="leaderboard sync",
+        )
+    except Exception:
+        pass
+
+
+def _persist_leaderboard():
+    global _leaderboard_upload_task
+    try:
+        with open(LEADERBOARD_CACHE_FILE, "w") as f:
+            json.dump(_leaderboard, f)
+    except Exception:
+        pass
+    if CACHE_DATASET and HF_TOKEN and _leaderboard_upload_task is None:
+        try:
+            _leaderboard_upload_task = asyncio.get_running_loop().create_task(_upload_leaderboard_soon())
+        except RuntimeError:
+            pass
+
+
 def _stage_from_text(*texts):
     t = " ".join(s for s in texts if s).lower().replace("-", " ")
     if "round of 32" in t:
@@ -306,6 +390,8 @@ def _normalize_scoreboard(data, include_upcoming=False):
             tm = c.get("team") or {}
             if tm.get("id"):
                 idmap[str(tm.get("id"))] = (tm.get("abbreviation") or "").upper()
+        home_abbr = (ht.get("abbreviation") or "").upper()
+        away_abbr = (at.get("abbreviation") or "").upper()
 
         def _score(c):
             try:
@@ -313,7 +399,7 @@ def _normalize_scoreboard(data, include_upcoming=False):
             except (TypeError, ValueError):
                 return 0
 
-        scorers = []
+        scorers, goals = [], []
         for d in comp.get("details") or []:
             if not d.get("scoringPlay"):
                 continue
@@ -322,16 +408,29 @@ def _normalize_scoreboard(data, include_upcoming=False):
             athletes = d.get("athletesInvolved") or []
             nm = athletes[0].get("displayName") if athletes else ""
             clk = ((d.get("clock") or {}).get("displayValue")) or ""
+            own_goal = bool(d.get("ownGoal"))
             s = f"{nm} ({abbr}) {clk}".strip()
-            if d.get("ownGoal"):
+            if own_goal:
                 s += " (OG)"
-            scorers.append(s)
-            if len(scorers) >= 6:
-                break
+            # "scorers" (display strings) caps at 6 to keep the compact score-bug
+            # card short; "goals" (structured, used for leaderboard aggregation)
+            # must NOT be capped — a high-scoring match would otherwise silently
+            # undercount whoever's goals fell past the cap.
+            if len(scorers) < 6:
+                scorers.append(s)
+            # ESPN's per-event "team" field is already the team CREDITED on the
+            # scoreboard — including for own goals (e.g. a Paraguay player's own
+            # goal against the USA is tagged team=USA, not PAR). Verified against
+            # FIFA's own match report for USA 4-1 Paraguay: "USA goals: Bobadilla
+            # (7 OG), Balogun (31, 45+5), Reyna (90+8)". No flip needed/wanted.
+            goals.append({
+                "player": nm, "team": abbr, "creditedTeam": abbr,
+                "minute": clk, "ownGoal": own_goal,
+            })
 
         matches.append({
-            "home": (ht.get("abbreviation") or "").upper(),
-            "away": (at.get("abbreviation") or "").upper(),
+            "home": home_abbr,
+            "away": away_abbr,
             "homeName": ht.get("displayName") or "",
             "awayName": at.get("displayName") or "",
             "hs": _score(home),
@@ -339,6 +438,7 @@ def _normalize_scoreboard(data, include_upcoming=False):
             "status": "LIVE" if state == "in" else "FT",
             "stage": stage,
             "scorers": scorers,
+            "goals": goals,
             "espnId": str(ev.get("id") or ""),
             "date": date,
             "venue": venue,
@@ -642,6 +742,22 @@ async def standings(dates: str = DEFAULT_DATES, upcoming: bool = False):
             pass
     if matches is None:
         raise HTTPException(502, "Scoreboard fetch failed (ESPN and FIFA)")
+    # Gate the leaderboard background refresh on "did the set of finished matches
+    # actually change" — not on this request happening. A plain page load that hits
+    # the 60s standings cache never reaches this line at all; even on a fresh ESPN
+    # fetch, an unchanged FT set is a no-op. Only ESPN (not the FIFA fallback) has the
+    # structured goals/espnId data the aggregation needs.
+    if source == "espn":
+        global _leaderboard_task
+        fp = _ft_fingerprint(matches)
+        if fp != _leaderboard.get("lastFtFingerprint"):
+            _leaderboard["lastFtFingerprint"] = fp
+            if _leaderboard_task is None:
+                try:
+                    _leaderboard_task = asyncio.get_running_loop().create_task(
+                        _process_new_matches_wrapper(matches))
+                except RuntimeError:
+                    pass
     payload = {"matches": matches, "source": source}
     _cache_set(key, payload)
     return payload
@@ -704,17 +820,13 @@ async def team_form(team: str):
     return payload
 
 
-@app.post("/api/serper")
-async def serper_search(request: Request):
-    """Web search via Serper.dev — returns trimmed organic results + answer box.
-    If SERPER_API_KEY is unset returns {organic:[]} so callers degrade gracefully.
-    Cached 3h per query string."""
-    body = await request.json()
-    q = str(body.get("q", "")).strip()
-    if not q:
-        raise HTTPException(400, "Missing query q")
+async def _serper_query(q: str) -> dict:
+    """Core of the Serper search call — factored out so server-side background jobs
+    (e.g. the leaderboard's Player-of-the-Match resolver) can reuse it directly instead
+    of looping back through HTTP. Cached 3h per query string; degrades to {organic:[]}
+    if SERPER_API_KEY is unset, so callers never need a try/except around this."""
     if not SERPER_API_KEY:
-        return {"organic": []}  # key not configured — degrade silently, never 500
+        return {"organic": []}
     key = f"serper:{q}"
     cached = _cache_get(key, ttl=SERPER_CACHE_TTL)
     if cached is not None:
@@ -728,8 +840,8 @@ async def serper_search(request: Request):
             )
         r.raise_for_status()
         data = r.json()
-    except Exception as e:
-        raise HTTPException(502, f"Serper search failed: {e}")
+    except Exception:
+        return {"organic": []}
     # Trim to token-bounded shape: top 6 organic + optional answer/knowledge
     organic = [
         {"title": o.get("title", ""), "snippet": o.get("snippet", ""),
@@ -745,6 +857,18 @@ async def serper_search(request: Request):
         payload["knowledgeGraph"] = {"description": kg["description"]}
     _cache_set(key, payload)
     return payload
+
+
+@app.post("/api/serper")
+async def serper_search(request: Request):
+    """Web search via Serper.dev — returns trimmed organic results + answer box.
+    If SERPER_API_KEY is unset returns {organic:[]} so callers degrade gracefully.
+    Cached 3h per query string."""
+    body = await request.json()
+    q = str(body.get("q", "")).strip()
+    if not q:
+        raise HTTPException(400, "Missing query q")
+    return await _serper_query(q)
 
 
 def _normalize_match(data):
@@ -859,7 +983,9 @@ def _normalize_match(data):
                  for p in parts]
         names = [n for n in names if n]
         text = ke.get("shortText") or ke.get("text") or " / ".join(names)
-        events.append({"min": clk, "type": etype, "side": side, "text": text})
+        # "player"/"team" give card aggregation a clean field instead of regexing "text"
+        events.append({"min": clk, "type": etype, "side": side, "team": abbr,
+                        "player": names[0] if names else "", "text": text})
         if etype == "goal":
             nm = names[0] if names else text
             s = f"{nm} ({abbr}) {clk}".strip()
@@ -895,6 +1021,247 @@ def _normalize_match(data):
         "hs": live_hs,
         "as": live_as,
         "liveStatus": live_status,
+    }
+
+
+# ============ LEADERBOARDS (goals / cards / Player of the Match) ============
+# Built incrementally as matches finish — never recomputed from scratch, and never
+# triggered by a plain page load. See _ft_fingerprint / the trigger in /api/standings.
+
+def _ft_fingerprint(matches) -> str:
+    """Sorted FT espnIds joined into one string — changes if and only if a match has
+    newly finished (or, rarely, an old FT match's id changes), which is exactly the
+    'a match ended' signal that should gate the background refresh."""
+    ft_ids = sorted(m["espnId"] for m in matches if m.get("status") == "FT" and m.get("espnId"))
+    return "|".join(ft_ids)
+
+
+def _rank_with_ties(items, value_key):
+    """Assign a 1-based rank where equal values on value_key share the same rank
+    (e.g. two players tied on goals both show rank 3) — items must already be sorted
+    descending by value_key."""
+    ranked, prev_val, prev_rank = [], None, 0
+    for i, item in enumerate(items, start=1):
+        val = item[value_key]
+        if val != prev_val:
+            prev_rank, prev_val = i, val
+        ranked.append({**item, "rank": prev_rank})
+    return ranked
+
+
+def _extract_json_loose(text: str) -> dict:
+    t = text.replace("```json", "").replace("```", "").strip()
+    i, j = t.find("{"), t.rfind("}")
+    if i < 0 or j < 0:
+        raise ValueError("no JSON object found in LLM response")
+    return json.loads(t[i:j + 1])
+
+
+async def _resolve_motm(m: dict):
+    """Player of the Match for one finished match — Serper context + a fast/cheap LLM
+    judgment, the same shape of pipeline the frontend already uses for the Match
+    Breakdown MVP note, just run server-side so the tally doesn't depend on a user
+    having opened that particular match's breakdown. Returns {player, team} or None."""
+    home, away = m.get("home", ""), m.get("away", "")
+    if not home or not away:
+        return None
+    cache_key = f"motm:{m.get('espnId')}"
+    if cache_key in _narratives:
+        text = _narratives[cache_key]
+    else:
+        serper = await _serper_query(
+            f"{home} vs {away} FIFA World Cup 2026 player of the match man of the match"
+        )
+        scorers = ", ".join(m.get("scorers") or []) or "no goals"
+        prompt = f"FIFA World Cup 2026: {home} {m.get('hs')}-{m.get('as')} {away}. Scorers: {scorers}.\n"
+        if serper.get("organic"):
+            prompt += "Web context:\n" + "\n".join(
+                f"- {o.get('title', '')}: {o.get('snippet', '')}" for o in serper["organic"][:5]
+            ) + "\n"
+        ab = serper.get("answerBox") or {}
+        if ab.get("answer") or ab.get("snippet"):
+            prompt += f"[Answer box: {ab.get('answer') or ab.get('snippet')}]\n"
+        prompt += (
+            'Who was the Player of the Match? Respond ONLY with this JSON (no fences): '
+            f'{{"player":"Full Name","team":"{home} or {away}"}}'
+        )
+        try:
+            text = await _llm_anthropic(prompt, False, 80, ANTHROPIC_FAST_MODEL)
+        except Exception:
+            return None
+        if not text:
+            return None
+        _narrative_store(cache_key, text)
+    try:
+        j = _extract_json_loose(text)
+        player = str(j.get("player", "")).strip()
+        team = str(j.get("team", "")).strip().upper()
+        if not player or team not in (home, away):
+            return None
+        return {"player": player, "team": team}
+    except Exception:
+        return None
+
+
+async def _process_new_matches(matches):
+    """Fold newly-finished matches into the persisted leaderboard aggregate. Every
+    sub-step skips anything already in its processed/pending set, so a repeat call
+    (e.g. triggered again before this one finishes) costs nothing for old matches —
+    only matches that just transitioned to FT do any work."""
+    ft = [m for m in matches if m.get("status") == "FT" and m.get("espnId")]
+    changed = False
+
+    # 1) goals/team-goals — already structured on the match dict, zero extra fetches
+    for m in ft:
+        eid = m["espnId"]
+        if eid in _leaderboard["processedGoalsMatchIds"]:
+            continue
+        for g in m.get("goals") or []:
+            credited = g.get("creditedTeam") or g.get("team")
+            if credited:
+                _leaderboard["teamGoals"][credited] = _leaderboard["teamGoals"].get(credited, 0) + 1
+            if not g.get("ownGoal") and g.get("player") and g.get("team"):
+                key = f"{g['player']}|{g['team']}"
+                entry = _leaderboard["scorerTally"].setdefault(
+                    key, {"player": g["player"], "team": g["team"], "goals": 0})
+                entry["goals"] += 1
+        _leaderboard["processedGoalsMatchIds"].append(eid)
+        changed = True
+
+    # 2) cards (per player AND per team, since team breakdown derives from the same
+    #    per-player records at read time) — needs one ESPN boxscore fetch per new
+    #    match, bounded so a wave of finishes doesn't hammer ESPN at once
+    todo_cards = [m for m in ft if m["espnId"] not in _leaderboard["processedCardsMatchIds"]]
+    card_sem = asyncio.Semaphore(3)
+
+    async def _fetch_cards(m):
+        eid = m["espnId"]
+        async with card_sem:
+            try:
+                async with httpx.AsyncClient(timeout=20) as client:
+                    r = await client.get(f"{ESPN_BASE}/summary?event={eid}")
+                r.raise_for_status()
+                detail = _normalize_match(r.json())
+            except Exception:
+                return  # left unprocessed — retried next time the FT set changes
+        for ev in detail.get("events") or []:
+            if ev.get("type") not in ("yellow", "red") or not ev.get("player") or not ev.get("team"):
+                continue
+            key = f"{ev['player']}|{ev['team']}"
+            entry = _leaderboard["playerCards"].setdefault(
+                key, {"player": ev["player"], "team": ev["team"], "yellow": 0, "red": 0})
+            entry[ev["type"]] += 1
+        _leaderboard["processedCardsMatchIds"].append(eid)
+
+    if todo_cards:
+        await asyncio.gather(*[_fetch_cards(m) for m in todo_cards])
+        changed = True
+
+    # 3) Player of the Match — Serper + a fast LLM judgment per new match. Queue first
+    #    (and persist immediately) so the "pending" count is visible right away even
+    #    while the calls are still in flight.
+    todo_motm = [
+        m for m in ft
+        if m["espnId"] not in _leaderboard["processedMotmMatchIds"]
+        and m["espnId"] not in _leaderboard["motmPendingMatchIds"]
+    ]
+    if todo_motm:
+        _leaderboard["motmPendingMatchIds"].extend(m["espnId"] for m in todo_motm)
+        _persist_leaderboard()
+
+    motm_sem = asyncio.Semaphore(2)
+
+    async def _fetch_motm(m):
+        eid = m["espnId"]
+        async with motm_sem:
+            result = await _resolve_motm(m)
+        if eid in _leaderboard["motmPendingMatchIds"]:
+            _leaderboard["motmPendingMatchIds"].remove(eid)
+        if result:
+            key = f"{result['player']}|{result['team']}"
+            entry = _leaderboard["motmTally"].setdefault(
+                key, {"player": result["player"], "team": result["team"], "awards": 0})
+            entry["awards"] += 1
+            _leaderboard["processedMotmMatchIds"].append(eid)
+        # on failure: removed from pending without joining processed — eligible to be
+        # retried the next time the FT fingerprint changes
+
+    if todo_motm:
+        await asyncio.gather(*[_fetch_motm(m) for m in todo_motm])
+        changed = True
+
+    if changed:
+        _persist_leaderboard()
+
+
+async def _process_new_matches_wrapper(matches):
+    """Clears the in-flight guard when the background pass finishes (success or not)
+    so the next FT-fingerprint change can schedule another one."""
+    global _leaderboard_task
+    try:
+        await _process_new_matches(matches)
+    finally:
+        _leaderboard_task = None
+
+
+@app.get("/api/leaderboards")
+async def leaderboards():
+    """Cheap and instant — returns the current persisted aggregate only. Never fetches
+    from ESPN/Serper/an LLM itself; that work happens in _process_new_matches, kicked
+    off in the background only when /api/standings sees the FT match set change."""
+    team_goals = _rank_with_ties(
+        sorted(({"team": t, "goals": g} for t, g in _leaderboard["teamGoals"].items()),
+               key=lambda x: -x["goals"]),
+        "goals",
+    )
+    scorers = _rank_with_ties(
+        sorted(_leaderboard["scorerTally"].values(), key=lambda x: -x["goals"]),
+        "goals",
+    )
+
+    player_cards = list(_leaderboard["playerCards"].values())
+    total_yellow = sum(p["yellow"] for p in player_cards)
+    total_red = sum(p["red"] for p in player_cards)
+    # sort by plain total card count — matches the number actually shown next to each
+    # row, so the order always looks right at a glance (a severity-weighted score
+    # would rank e.g. a 2-card team above several 3-card teams, which reads as a bug)
+    most_booked = sorted(player_cards, key=lambda p: -(p["yellow"] + p["red"]))[:15]
+
+    team_cards: dict = {}
+    for p in player_cards:
+        tc = team_cards.setdefault(p["team"], {"team": p["team"], "yellow": 0, "red": 0, "players": []})
+        tc["yellow"] += p["yellow"]
+        tc["red"] += p["red"]
+        tc["players"].append({"player": p["player"], "yellow": p["yellow"], "red": p["red"]})
+    team_cards_list = sorted(team_cards.values(), key=lambda t: -(t["yellow"] + t["red"]))
+    for t in team_cards_list:
+        t["players"].sort(key=lambda p: -(p["yellow"] + p["red"]))
+
+    # any match whose (zero-cost) goals are folded in but whose cards aren't yet is
+    # still "compiling" card detail — a clean signal with no extra bookkeeping needed
+    compiling_count = len(
+        set(_leaderboard["processedGoalsMatchIds"]) - set(_leaderboard["processedCardsMatchIds"])
+    )
+
+    motm_list = _rank_with_ties(
+        sorted(_leaderboard["motmTally"].values(), key=lambda x: -x["awards"]),
+        "awards",
+    )
+
+    return {
+        "teamGoals": team_goals,
+        "scorers": scorers,
+        "cards": {
+            "totalYellow": total_yellow,
+            "totalRed": total_red,
+            "mostBooked": most_booked,
+            "teamCards": team_cards_list,
+            "compilingCount": compiling_count,
+        },
+        "motm": {
+            "list": motm_list,
+            "pendingMatches": len(_leaderboard["motmPendingMatchIds"]),
+        },
     }
 
 
