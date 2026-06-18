@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import json
 import os
 import time
@@ -171,6 +172,24 @@ async def _upload_visitors_soon():
         pass
 
 
+def _is_public_ip(ip: str) -> bool:
+    """False for loopback/private/link-local/reserved addresses (localhost testing,
+    LAN clients) and anything unparseable — keeps test traffic out of analytics."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return not (addr.is_private or addr.is_loopback or addr.is_link_local
+                or addr.is_reserved or addr.is_multicast or addr.is_unspecified)
+
+
+_GEO_EMPTY = {
+    "city": "", "country": "", "countryCode": "", "lat": None, "lon": None,
+    "regionName": "", "isp": "", "org": "",
+    "mobile": False, "proxy": False, "hosting": False,
+}
+
+
 async def _geolocate(ip: str) -> dict:
     if ip in _ip_geo_cache:
         return _ip_geo_cache[ip]
@@ -178,21 +197,27 @@ async def _geolocate(ip: str) -> dict:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(
                 f"http://ip-api.com/json/{ip}",
-                params={"fields": "status,city,country,countryCode,lat,lon"},
+                params={"fields": "status,city,regionName,country,countryCode,lat,lon,isp,org,mobile,proxy,hosting"},
             )
         data = r.json()
         if data.get("status") == "success":
             geo = {
                 "city": data.get("city", ""),
+                "regionName": data.get("regionName", ""),
                 "country": data.get("country", ""),
                 "countryCode": data.get("countryCode", ""),
                 "lat": data.get("lat"),
                 "lon": data.get("lon"),
+                "isp": data.get("isp", ""),
+                "org": data.get("org", ""),
+                "mobile": bool(data.get("mobile", False)),
+                "proxy": bool(data.get("proxy", False)),
+                "hosting": bool(data.get("hosting", False)),
             }
         else:
-            geo = {"city": "", "country": "", "countryCode": "", "lat": None, "lon": None}
+            geo = dict(_GEO_EMPTY)
     except Exception:
-        geo = {"city": "", "country": "", "countryCode": "", "lat": None, "lon": None}
+        geo = dict(_GEO_EMPTY)
     _ip_geo_cache[ip] = geo
     return geo
 
@@ -536,6 +561,8 @@ async def llm_proxy(request: Request):
 async def track_visit(request: Request):
     xff = request.headers.get("x-forwarded-for", "")
     ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    if not _is_public_ip(ip):
+        return {"ok": True, "tracked": False}  # local/private testing traffic — don't log
     body = {}
     try:
         body = await request.json()
@@ -562,17 +589,22 @@ async def track_visit(request: Request):
 async def analytics(key: str = ""):
     if ANALYTICS_KEY and key != ANALYTICS_KEY:
         raise HTTPException(403, "Invalid key")
-    recent = _visitors[-200:][::-1]  # newest first
+    # drop local/private-IP noise from earlier testing (already-recorded entries),
+    # on top of track_visit no longer recording new ones
+    visitors = [v for v in _visitors if _is_public_ip(v.get("ip", ""))]
+    recent = visitors[-200:][::-1]  # newest first
     # aggregate by country
-    countries = Counter(v["countryCode"] for v in _visitors if v.get("countryCode"))
+    countries = Counter(v["countryCode"] for v in visitors if v.get("countryCode"))
     cities = Counter(
-        f"{v['city']}, {v['countryCode']}" for v in _visitors
+        f"{v['city']}, {v['countryCode']}" for v in visitors
         if v.get("city") and v.get("countryCode")
     )
-    unique_ips = len({v["ip"] for v in _visitors})
+    unique_ips = len({v["ip"] for v in visitors})
+    bot_like = sum(1 for v in visitors if v.get("hosting") or v.get("proxy"))
     return {
-        "total": len(_visitors),
+        "total": len(visitors),
         "uniqueIPs": unique_ips,
+        "botLike": bot_like,
         "topCountries": countries.most_common(10),
         "topCities": cities.most_common(10),
         "recent": recent[:100],

@@ -70,7 +70,7 @@ tr:last-child td{border-bottom:none}
       <canvas id="countryChart"></canvas>
     </div>
     <div class="card">
-      <h2>Visits over time (hourly)</h2>
+      <h2>Visits over time (hourly, IST)</h2>
       <canvas id="timeChart"></canvas>
     </div>
   </div>
@@ -79,8 +79,9 @@ tr:last-child td{border-bottom:none}
     <h2>Recent Visitors</h2>
     <table id="recentTable">
       <thead><tr>
-        <th>Time (UTC)</th>
+        <th>Time (IST)</th>
         <th>Location</th>
+        <th>Network</th>
         <th>IP</th>
         <th>Referrer</th>
         <th>User Agent</th>
@@ -109,7 +110,20 @@ function flag(cc){ return COUNTRY_FLAGS[cc] || '🌐'; }
 function esc(s){ const d=document.createElement('div');d.textContent=s||'';return d.innerHTML; }
 
 function fmtTime(iso){
-  try{ return new Date(iso).toISOString().replace('T',' ').slice(0,19); }catch(e){ return iso||''; }
+  try{
+    return new Date(iso).toLocaleString('en-GB',{
+      timeZone:'Asia/Kolkata',year:'numeric',month:'short',day:'2-digit',
+      hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+    });
+  }catch(e){ return iso||''; }
+}
+/* "YYYY-MM-DD HHh" bucket key in IST, for the hourly chart — so day/hour boundaries
+   match the IST day the rest of the app uses, not UTC */
+function istHourKey(tsMs){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hour12:false}).formatToParts(new Date(tsMs));
+  const get=t=>parts.find(p=>p.type===t).value;
+  let hh=get('hour');if(hh==='24')hh='00';
+  return `${get('year')}-${get('month')}-${get('day')} ${hh}h`;
 }
 
 function truncateUA(ua){
@@ -181,20 +195,18 @@ function buildCountryChart(topCountries){
 }
 
 function buildTimeChart(visitors){
-  // bucket by hour
+  // bucket by hour, in IST (so day/hour boundaries match the rest of the app)
   const buckets = {};
   const now = Date.now();
   const cutoff = now - 72*3600*1000; // last 72 h
   for(const v of visitors){
     const ts = v.ts*1000;
     if(ts < cutoff) continue;
-    const h = new Date(ts);
-    h.setMinutes(0,0,0);
-    const key = h.toISOString().slice(0,13);
+    const key = istHourKey(ts);
     buckets[key] = (buckets[key]||0)+1;
   }
   const keys = Object.keys(buckets).sort();
-  const labels = keys.map(k=> k.replace('T',' ')+'h');
+  const labels = keys;
   const values = keys.map(k=>buckets[k]);
   if(timeChart) timeChart.destroy();
   timeChart = new Chart(document.getElementById('timeChart'),{
@@ -214,12 +226,28 @@ function buildTimeChart(visitors){
 }
 
 // ── Table ────────────────────────────────────────────────────────────────────
+function locationCell(v){
+  const place = v.city && v.country ? `${v.city}, ${v.country}` : (v.country||'Unknown');
+  const region = v.regionName && v.regionName!==v.city ? ` <span style="color:var(--muted)">(${esc(v.regionName)})</span>` : '';
+  return `${esc(flag(v.countryCode))} ${esc(place)}${region}`;
+}
+function badge(label,color){ return `<span style="font-size:10px;border:1px solid ${color};color:${color};border-radius:999px;padding:1px 6px;margin-right:3px;white-space:nowrap">${label}</span>`; }
+function networkCell(v){
+  const net = esc(v.isp||v.org||'—');
+  const badges = [
+    v.hosting?badge('HOSTING','var(--red)'):'',
+    v.proxy?badge('PROXY','var(--gold)'):'',
+    v.mobile?badge('MOBILE','var(--blue)'):'',
+  ].join('');
+  return `<div>${net}</div>${badges?`<div style="margin-top:3px">${badges}</div>`:''}`;
+}
 function buildTable(visitors){
   const tbody = document.getElementById('recentBody');
   tbody.innerHTML = visitors.slice(0,100).map(v=>`
     <tr>
       <td class="ts">${esc(fmtTime(v.iso))}</td>
-      <td>${esc(flag(v.countryCode))} ${esc(v.city&&v.country?v.city+', '+v.country:v.country||'Unknown')}</td>
+      <td>${locationCell(v)}</td>
+      <td class="ua">${networkCell(v)}</td>
       <td class="ip">${esc(v.ip||'')}</td>
       <td class="ua">${esc(v.ref||'—')}</td>
       <td class="ua">${esc(truncateUA(v.ua))}</td>
@@ -235,6 +263,7 @@ function buildStats(data){
     {val: data.uniqueIPs, lbl:'Unique Visitors'},
     {val: data.topCountries.length, lbl:'Countries'},
     {val: data.topCities.length,    lbl:'Cities'},
+    {val: data.botLike||0, lbl:'Bot-like (hosting/proxy)'},
   ];
   document.getElementById('statsRow').innerHTML = items.map(i=>
     `<div class="stat"><div class="val">${i.val}</div><div class="lbl">${i.lbl}</div></div>`
