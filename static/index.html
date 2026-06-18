@@ -277,11 +277,43 @@ td.pts{font-weight:700;color:var(--chalk)}
 .credits svg{display:block}
 .credits .hrt{color:#E2574C}
 
+/* ---------- projected bracket ---------- */
+.brkhint{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);margin:2px 0 10px;text-transform:uppercase}
+.brkscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:26px;padding-bottom:8px}
+.brkgrid{display:flex;gap:28px;min-width:max-content;align-items:stretch;height:600px}
+.brkcol{display:flex;flex-direction:column;justify-content:space-around;min-width:158px}
+.brkcol.brkchampcol{justify-content:center;min-width:170px}
+.brkch{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;text-align:center;margin-bottom:8px;position:sticky;top:0}
+.brknode{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12px;position:relative}
+.brknode.played{border-color:#2e4f3a}
+.brkrow{display:flex;align-items:center;gap:6px;padding:7px 9px}
+.brkrow+.brkrow{border-top:1px solid var(--line)}
+.brkrow .bf{font-size:15px;flex-shrink:0}
+.brkrow .bn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.brkrow .bp{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
+.brkrow.win{background:rgba(0,194,119,.12);border-left:3px solid var(--green)}
+.brkrow.win .bn{font-weight:700;color:var(--chalk)}
+.brkrow.win .bp{color:var(--green)}
+.brkrow.lose{opacity:.5}
+.brkrow.tbd .bn{font-style:italic}
+.brkflag{font-family:var(--mono);font-size:11px;font-weight:700;margin-left:2px;flex-shrink:0}
+.brkflag.ok{color:var(--green)}
+.brkflag.no{color:var(--red)}
+.brkchamp{align-self:center;text-align:center;padding:20px 18px;border-radius:14px;border:1px solid var(--gold);background:linear-gradient(135deg,var(--panel) 0%,#1A2E12 100%);min-width:160px}
+.brkchamp .trophy{font-size:30px}
+.brkchamp .cflag{font-size:32px;margin-top:6px}
+.brkchamp .cname{font-family:'Archivo Black',sans-serif;font-size:18px;margin:6px 0 2px}
+.brkchamp .cpct{font-family:var(--mono);font-size:11px;color:var(--gold)}
+.brkchamp .cnote{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px}
+
 @media(max-width:560px){
   .tab{font-size:11px;padding:10px 4px}
   .mgrid{grid-template-columns:1fr}
   .orow{grid-template-columns:24px 22px 1fr 52px}
   .lineups{grid-template-columns:1fr}
+  .brkcol{min-width:130px}
+  .brkgrid{gap:18px;height:540px}
+  .brkrow .bn{font-size:11px}
 }
 </style>
 </head>
@@ -520,6 +552,14 @@ const KO=[
 ['k31','F','Jul 18','5:00 PM','HRD'],['k32','F','Jul 19','3:00 PM','MET']];
 const KO_LABEL={k31:'Bronze Final',k32:'THE FINAL'};
 const STAGE_NAME={GS:'Group Stage',R32:'Round of 32',R16:'Round of 16',QF:'Quarterfinal',SF:'Semifinal',F:'Final'};
+/* Official WC26 bracket adjacency (verified against FIFA's published knockout tree,
+   matched to our KO slot ids by date+venue): which two R16 slots feed each QF slot,
+   which two QF slots feed each SF slot, and which two SF slots feed the Final. */
+const BRACKET={
+  k25:['k17','k18'], k26:['k21','k22'], k27:['k19','k20'], k28:['k23','k24'],
+  k29:['k25','k26'], k30:['k27','k28'],
+  k32:['k29','k30']
+};
 
 /* seeded results — last verified Jun 12, 2026 (opener data; pull fresh for finals) */
 let state={
@@ -533,6 +573,8 @@ let state={
   matchPreds:{},      /* mid -> {key, takes:{anthropic}, ts} — per-match AI prediction takes (single Claude) */
   deepPreds:{},       /* mid -> {score, take, model, ts, key} — Serper-enriched deep prediction */
   matchFacts:{},      /* mid -> {h2h, form, players, news, model, date} — cached facts tab content */
+  koPreds:{},         /* 'STAGE:CODE1-CODE2' -> {winner,winProb,score,take,model,ts,key} — blended
+                          (stat+LLM+Serper) knockout-tie prediction backing the Projected Bracket */
   lastSync:'Jun 12, 2026 (seeded)'
 };
 
@@ -542,8 +584,8 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className='toast show'+(err?' err':'');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),4200)}
 
 /* persistence via artifact storage (private to you); silently falls back to in-memory */
-async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,matchPreds:state.matchPreds,deepPreds:state.deepPreds,matchFacts:state.matchFacts,lastSync:state.lastSync}))}catch(e){}}
-async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});Object.assign(state.matchPreds,s.matchPreds||{});Object.assign(state.deepPreds,s.deepPreds||{});Object.assign(state.matchFacts,s.matchFacts||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
+async function saveState(){try{if(window.storage)await window.storage.set('wc26_state',JSON.stringify({results:state.results,koTeams:state.koTeams,breakdowns:state.breakdowns,espnIds:state.espnIds,predAnalysis:state.predAnalysis,matchPreds:state.matchPreds,deepPreds:state.deepPreds,matchFacts:state.matchFacts,koPreds:state.koPreds,lastSync:state.lastSync}))}catch(e){}}
+async function loadState(){try{if(window.storage){const r=await window.storage.get('wc26_state');if(r&&r.value){const s=JSON.parse(r.value);Object.assign(state.results,s.results||{});Object.assign(state.koTeams,s.koTeams||{});Object.assign(state.breakdowns,s.breakdowns||{});Object.assign(state.espnIds,s.espnIds||{});Object.assign(state.matchPreds,s.matchPreds||{});Object.assign(state.deepPreds,s.deepPreds||{});Object.assign(state.matchFacts,s.matchFacts||{});Object.assign(state.koPreds,s.koPreds||{});if(s.predAnalysis)state.predAnalysis=s.predAnalysis;if(s.lastSync)state.lastSync=s.lastSync}}}catch(e){}}
 
 /* IST display: fixtures are US Eastern (EDT, UTC-4) for the whole Jun 11 – Jul 19 window; IST is UTC+5:30 → fixed +9:30 shift */
 const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
@@ -563,6 +605,24 @@ function fmtIST(dateStr,timeStr){
   };
   _istCache[key]=out;
   return out;
+}
+
+/* Find the KO slot (within a given stage) whose scheduled kickoff is closest to a real
+   match's reported date. Used to bind real knockout results to the correct bracket
+   position instead of greedily filling the first open slot of the stage — important
+   once multiple matches share a stage/day. Returns null if no slot is within 12h
+   (caller falls back to greedy fill). */
+function findKoSlotByDate(stage,realDateStr){
+  if(!realDateStr)return null;
+  const realTs=Date.parse(realDateStr);
+  if(isNaN(realTs))return null;
+  let best=null,bestDiff=Infinity;
+  for(const k of KO){
+    if(k[1]!==stage)continue;
+    const diff=Math.abs(fmtIST(k[2],k[3]).ts-realTs);
+    if(diff<bestDiff){bestDiff=diff;best=k[0]}
+  }
+  return bestDiff<12*3600*1000?best:null;
 }
 function allMatches(){
   const g=GS.map(m=>{const i=fmtIST(m[1],m[2]);return{id:m[0],stage:'GS',d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[1],g:m[3],h:m[4],a:m[5],v:VEN[m[6]]}});
@@ -989,6 +1049,184 @@ async function genDeepPred(mid){
   if(el)el.outerHTML=deepPredHTML(mid);
 }
 
+/* ---- Projected Bracket: blended (stat + LLM + Serper) per-tie knockout predictions ----
+   Mirrors genDeepPred above, but keyed by a (h,a,stage) pairing rather than a fixed match
+   id, since QF/SF/Final pairings are themselves projected and shift as upsets land. */
+const W_STAT=0.6, W_LLM=0.4; /* blend weights for the bracket's per-tie win probability */
+function koPairKey(h,a,stage){return stage+':'+[h,a].sort().join('-');}
+function koPredKey(h,a,stage,formH,formA){
+  return 'kopred:'+koPairKey(h,a,stage)+':'+(formH?formH.summary:'')+'|'+(formA?formA.summary:'');
+}
+function buildKoPredPrompt(h,a,stage,formH,formA,facts,serper){
+  const p=matchProbs(h,a),w=x=>Math.round(100*x);
+  const tieP=p.pH/(p.pH+p.pA); /* stat model's no-draw (knockout) win prob for h */
+  const where=STAGE_NAME[stage]||stage;
+  let prompt=`FIFA World Cup 2026, ${where} (knockout — no draw, decided by extra time/penalties if level): ${TEAMS[h].n} vs ${TEAMS[a].n}.
+Stat model (Poisson/Elo, tie-adjusted): ${TEAMS[h].n} ${w(tieP)}% to advance, ${TEAMS[a].n} ${w(1-tieP)}%; regulation-time most likely score ${p.best[0]}-${p.best[1]}.
+${TEAMS[h].n} (FIFA #${TEAMS[h].rk}; Elo ${effElo(h).toFixed(0)}): ${TEAMS[h].note}.
+${TEAMS[a].n} (FIFA #${TEAMS[a].rk}; Elo ${effElo(a).toFixed(0)}): ${TEAMS[a].note}.`;
+  if(formH){
+    const recent=formH.recent.map(r=>`${r.res} vs ${r.opp}(${r.ha}) ${r.gf}-${r.ga}`).join(', ');
+    prompt+=`\n${TEAMS[h].n} recent form: ${formH.summary}. ${recent}.`;
+  }
+  if(formA){
+    const recent=formA.recent.map(r=>`${r.res} vs ${r.opp}(${r.ha}) ${r.gf}-${r.ga}`).join(', ');
+    prompt+=`\n${TEAMS[a].n} recent form: ${formA.summary}. ${recent}.`;
+  }
+  if(facts&&facts.home&&(facts.home.startingXI||[]).length){
+    const xi=facts.home.startingXI.slice(0,11).map(pl=>pl.name).join(', ');
+    prompt+=`\n${TEAMS[h].n} XI (${facts.home.formation||''}): ${xi}.`;
+  }
+  if(facts&&facts.away&&(facts.away.startingXI||[]).length){
+    const xi=facts.away.startingXI.slice(0,11).map(pl=>pl.name).join(', ');
+    prompt+=`\n${TEAMS[a].n} XI (${facts.away.formation||''}): ${xi}.`;
+  }
+  if(serper&&serper.organic&&serper.organic.length){
+    prompt+='\nRecent web context (team news, injuries, form, head-to-head):';
+    serper.organic.slice(0,6).forEach(o=>{
+      prompt+=`\n- ${o.title}${o.date?' ('+o.date+')':''}: ${o.snippet}`;
+    });
+    if(serper.answerBox&&(serper.answerBox.answer||serper.answerBox.snippet))
+      prompt+=`\n[Answer box: ${serper.answerBox.answer||serper.answerBox.snippet}]`;
+  }
+  prompt+=`\nThis is a knockout tie — there is no draw, a winner is required. Give YOUR prediction. Respond ONLY with this JSON (no fences):
+{"winner":"${h}","winProb":0.62,"score":"2-1","take":"1-2 punchy sentences: who advances and the key reason"}
+"winner" must be exactly "${h}" or "${a}" (whichever you think advances). "winProb" is YOUR probability (0.50-0.95) that "winner" advances. "score" is ${TEAMS[h].n}-goals dash ${TEAMS[a].n}-goals, a regulation-time guess (can be level if you expect extra time).`;
+  return prompt;
+}
+/* debounced, generation-guarded re-render — batches streaming genKoPred completions so a
+   burst of cache misses (e.g. a fresh R16 fill) doesn't repaint the bracket on every call */
+let _brkGen=0,_brkTimer=null;
+function scheduleBracketRerender(){
+  clearTimeout(_brkTimer);
+  const gen=++_brkGen;
+  _brkTimer=setTimeout(()=>{if(gen===_brkGen&&SIM)renderPredictions();},150);
+}
+async function genKoPred(h,a,stage){
+  if(!TEAMS[h]||!TEAMS[a])return;
+  /* if this pairing already corresponds to a real (bound) bracket slot, reuse its ESPN
+     event id for lineups; hypothetical/projected pairings simply skip the lineup fetch */
+  const slot=Object.keys(state.koTeams).find(id=>{
+    const kt=state.koTeams[id];
+    return kt&&((kt.h===h&&kt.a===a)||(kt.h===a&&kt.a===h));
+  });
+  const espnId=slot&&(state.espnIds[slot]||(state.results[slot]&&state.results[slot].espnId));
+  const[formH,formA,facts,serper]=await Promise.all([
+    fetchTeamForm(h),fetchTeamForm(a),
+    espnId?fetchFacts(espnId):Promise.resolve(null),
+    fetchSerper(buildSerperQuery({h,a,stage}))
+  ]);
+  const pk=koPairKey(h,a,stage);
+  const key=koPredKey(h,a,stage,formH,formA);
+  if(state.koPreds[pk]&&state.koPreds[pk].key===key)return; /* fresh, skip */
+  const prompt=buildKoPredPrompt(h,a,stage,formH,formA,facts,serper);
+  let result;
+  try{result=await callLLM(prompt,false,{max_tokens:220,tier:'quality',cacheKey:key,provider:'anthropic'});}
+  catch(e){return;}
+  if(!result||!result.text)return;
+  let winner=null,winProb=null,score=null,take='';
+  try{
+    const j=extractJSON(result.text);
+    winner=String(j.winner||'').trim().toUpperCase();
+    if(winner!==h&&winner!==a)winner=null;
+    winProb=Number(j.winProb);
+    winProb=isFinite(winProb)?Math.min(0.95,Math.max(0.5,winProb)):null;
+    score=String(j.score||'').trim().replace(/\s/g,'');
+    if(!/^\d+-\d+$/.test(score))score=null;
+    take=String(j.take||'').trim();
+  }catch(e){take=result.text.trim();}
+  if(!winner||winProb==null)return; /* unusable — node just stays on stat-only odds */
+  state.koPreds[pk]={winner,winProb,score,take,model:result.model,ts:new Date().toLocaleString(),key};
+  await saveState();
+  scheduleBracketRerender();
+}
+/* bounded-concurrency queue (≤3), mirrors queueDeepPred/drainDeepPred */
+const _koBusy=new Set();let _koQueue=[],_koActive=0;
+function queueKoPred(h,a,stage){
+  if(!h||!a||!TEAMS[h]||!TEAMS[a])return;
+  const pk=koPairKey(h,a,stage);
+  if(_koBusy.has(pk))return;
+  _koBusy.add(pk);_koQueue.push({h,a,stage,pk});drainKoPred();
+}
+function drainKoPred(){
+  while(_koActive<3&&_koQueue.length){
+    const job=_koQueue.shift();_koActive++;
+    genKoPred(job.h,job.a,job.stage).finally(()=>{_koActive--;_koBusy.delete(job.pk);drainKoPred()});
+  }
+}
+
+/* tieProb: blend the stat model's knockout (no-draw) win prob with the cached LLM pick,
+   if one exists yet, into a single probability. Pure — never touches the network/cache. */
+function tieProb(h,a,stage){
+  const p=matchProbs(h,a);
+  const pStat=p.pH/(p.pH+p.pA);
+  const kp=state.koPreds[koPairKey(h,a,stage)];
+  if(!kp)return{pH:pStat,pA:1-pStat,winner:pStat>=0.5?h:a,llm:false};
+  const pLlm=kp.winner===h?kp.winProb:1-kp.winProb;
+  const pH=W_STAT*pStat+W_LLM*pLlm;
+  return{pH,pA:1-pH,winner:pH>=0.5?h:a,llm:true};
+}
+/* resolve a single bracket node: real FT result (if bound to this slot) locks the winner
+   and flags whether our pre-match prediction called it; otherwise the node is projected
+   from tieProb. a/b null (upstream pairing still unknown) renders as an open placeholder. */
+function resolveNode(slot,stage,a,b){
+  if(!a||!b)return{slot,stage,a:a||null,b:b||null,winner:null,played:false,pa:null,pb:null,predWinner:null,correct:null,llm:false};
+  const tp=tieProb(a,b,stage);
+  const real=state.results[slot],kt=state.koTeams[slot];
+  const ktMatches=kt&&((kt.h===a&&kt.a===b)||(kt.h===b&&kt.a===a));
+  if(real&&real.status==='FT'&&ktMatches){
+    /* hs/as are stored already normalized to kt.h/kt.a orientation (see pullFresh) */
+    const winner=real.hs===real.as?tp.winner:(real.hs>real.as?kt.h:kt.a); /* KO can't draw — tp.winner is a defensive fallback only */
+    return{slot,stage,a,b,winner,played:true,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:tp.winner===winner,llm:tp.llm};
+  }
+  return{slot,stage,a,b,winner:tp.winner,played:false,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:null,llm:tp.llm};
+}
+const R16_SLOTS=['k17','k18','k19','k20','k21','k22','k23','k24'];
+const QF_SLOTS=['k25','k26','k27','k28'];
+const SF_SLOTS=['k29','k30'];
+const F_SLOT='k32';
+/* projectBracket: pure & synchronous. Resolves R16→QF→SF→F stage by stage off real
+   results + cached koPreds, so a real upset automatically re-derives every downstream
+   pairing. Never enqueues LLM work — see refreshBracketPreds for that. */
+function projectBracket(){
+  const winnerOf=n=>n?n.winner:null;
+  const bySlot={};
+  const R16=R16_SLOTS.map(slot=>{
+    const kt=state.koTeams[slot];
+    const n=resolveNode(slot,'R16',kt&&kt.h,kt&&kt.a);
+    bySlot[slot]=n;return n;
+  });
+  const QF=QF_SLOTS.map(slot=>{
+    const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);
+    const n=resolveNode(slot,'QF',winnerOf(f0),winnerOf(f1));
+    bySlot[slot]=n;return n;
+  });
+  const SF=SF_SLOTS.map(slot=>{
+    const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);
+    const n=resolveNode(slot,'SF',winnerOf(f0),winnerOf(f1));
+    bySlot[slot]=n;return n;
+  });
+  const[f0,f1]=BRACKET[F_SLOT].map(s=>bySlot[s]);
+  const F=[resolveNode(F_SLOT,'F',winnerOf(f0),winnerOf(f1))];
+  return{rounds:{R16,QF,SF,F},champ:F[0].winner};
+}
+/* refreshBracketPreds: the ONLY place genKoPred is enqueued. Called from pullFresh after
+   results are bound, never from a render. Walks the freshly-projected bracket and queues
+   a prediction only for pairings with no cached koPred yet — i.e. a brand-new pairing
+   (first-time R16 fill, or a downstream QF/SF/F pairing that just changed because an
+   upset replaced the team it expected). An ended match whose real winner matches what we
+   already predicted leaves every downstream pairing — and its cache key — unchanged, so
+   it costs zero calls; only a mismatch (✗) produces new, cache-missing pairings here. */
+function refreshBracketPreds(){
+  const{rounds}=projectBracket();
+  const nodes=[...rounds.R16,...rounds.QF,...rounds.SF,...rounds.F];
+  for(const n of nodes){
+    if(n.played||!n.a||!n.b)continue;
+    if(state.koPreds[koPairKey(n.a,n.b,n.stage)])continue;
+    queueKoPred(n.a,n.b,n.stage);
+  }
+}
+
 /* memoized map of mid -> ESPN event id, including upcoming matches (for Squad & Formations) */
 let _espnIdsPromise=null;
 async function ensureEspnIds(force){
@@ -1008,7 +1246,8 @@ async function ensureEspnIds(force){
         if(!hit&&r.stage&&r.stage!=='GS'&&TEAMS[home]&&TEAMS[away]){
           const stage=r.stage==='BRONZE'||r.stage==='F'?'F':r.stage;
           const slots=KO.filter(k=>k[1]===stage).map(k=>k[0]);
-          const slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===home&&kt.a===away)||(kt.h===away&&kt.a===home))});
+          let slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===home&&kt.a===away)||(kt.h===away&&kt.a===home))});
+          if(!slot){const byDate=findKoSlotByDate(stage,r.date);if(byDate&&state.koTeams[byDate])slot=byDate;}
           if(slot)hit={id:slot};
         }
         if(hit&&state.espnIds[hit.id]!==r.espnId){state.espnIds[hit.id]=r.espnId;changed=true}
@@ -1033,10 +1272,13 @@ async function pullFresh(){
       const home=toCode(r.home,r.homeName), away=toCode(r.away,r.awayName);
       let hit=pairIndex[home+'|'+away];
       if(!hit&&r.stage&&r.stage!=='GS'&&TEAMS[home]&&TEAMS[away]){
-        /* knockout match: find its slot (existing pairing, or first open slot in that stage) */
+        /* knockout match: find its slot — existing pairing, else by date+time match
+           against the slot's scheduled kickoff (correct even with same-day matches),
+           else first open slot in that stage as a last-resort fallback */
         const stage=r.stage==='BRONZE'||r.stage==='F'?'F':r.stage;
         const slots=KO.filter(k=>k[1]===stage).map(k=>k[0]);
         let slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===home&&kt.a===away)||(kt.h===away&&kt.a===home))});
+        if(!slot){const byDate=findKoSlotByDate(stage,r.date);if(byDate&&!state.koTeams[byDate])slot=byDate;}
         if(!slot)slot=slots.find(id=>!state.koTeams[id]);
         if(r.stage==='BRONZE')slot='k31';if(r.stage==='F')slot='k32';
         if(slot){
@@ -1057,6 +1299,7 @@ async function pullFresh(){
     recomputeEff(state.results); /* update dynamic Elo before any render/matchProbs call */
     /* scoreboard fresh + interactive first; predictions recompute async in a Worker */
     renderSchedule();renderLiveUpcoming();renderStandings();renderBdSelect();
+    refreshBracketPreds(); /* gated LLM trigger — only enqueues newly-unresolved bracket pairings */
     toast(updated?('Updated '+updated+' match'+(updated>1?'es':'')+' via '+source+' ⚽'):'No new finished matches found yet');
     btn.disabled=false;btn.innerHTML='⟳ Pull Fresh Standings';
     schedulePredictions();
@@ -1203,18 +1446,43 @@ function rationale(h,a,p){
   else edge=`a heavy mismatch on paper (${ag} rating points) — but ${TEAMS[dog].n} only needs one perfect day`;
   return `<b>${dH.n}</b> (FIFA #${dH.rk}): ${dH.note}. <b>${dA.n}</b> (FIFA #${dA.rk}): ${dA.note}. The model sees ${edge}.`;
 }
+/* ---- Projected Bracket rendering (R16 → Final → Champion), the Predictions tab centerpiece ---- */
+function brkRow(team,node){
+  if(!team)return`<div class="brkrow tbd"><span class="bf">⏳</span><span class="bn">TBD</span></div>`;
+  const isWin=team===node.winner;
+  const prob=team===node.a?node.pa:node.pb;
+  const cls='brkrow'+(node.winner?(isWin?' win':' lose'):'');
+  const flag=(node.played&&isWin)?`<span class="brkflag ${node.correct?'ok':'no'}">${node.correct?'✓':'✗'}</span>`:'';
+  const pctTxt=prob!=null?Math.round(prob*100)+'%':'';
+  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><span class="bn">${esc(TEAMS[team].n)}</span>${flag}<span class="bp">${pctTxt}</span></div>`;
+}
+function brkNode(node){
+  return`<div class="brknode${node.played?' played':''}">${brkRow(node.a,node)}${brkRow(node.b,node)}</div>`;
+}
+function renderBracket(){
+  if(!SIM)return'';
+  const{rounds,champ}=projectBracket();
+  const col=(title,nodes)=>`<div class="brkcol"><div class="brkch">${title}</div>${nodes.map(brkNode).join('')}</div>`;
+  const champHTML=champ
+    ?`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">${teamFlag(champ)}</div><div class="cname">${esc(TEAMS[champ].n)}</div><div class="cpct">title in ${pct(SIM.title[champ],SIM.n)} of all sims</div></div>`
+    :`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">⏳</div><div class="cname">TBD</div><div class="cnote">awaiting the Round of 16</div></div>`;
+  return`<div class="secl">Projected bracket — the chalk path</div>
+  <div class="brkhint">SWIPE TO FOLLOW THE PATH →</div>
+  <div class="brkscroll"><div class="brkgrid">
+    ${col('ROUND OF 16',rounds.R16)}
+    ${col('QUARTERFINAL',rounds.QF)}
+    ${col('SEMIFINAL',rounds.SF)}
+    ${col('FINAL',rounds.F)}
+    <div class="brkcol brkchampcol"><div class="brkch">CHAMPION</div>${champHTML}</div>
+  </div></div>`;
+}
 function renderPredictions(){
   if(!SIM)return;
   const n=SIM.n;
   const rank=Object.keys(TEAMS).sort((x,y)=>SIM.title[y]-SIM.title[x]);
   const top=rank[0];
-  const fpBest=Object.entries(SIM.finalPair).sort((a,b)=>b[1]-a[1])[0];
-  let html=`<div class="champ">
-    <div class="lbl">🏆 PROJECTED CHAMPION · ${n.toLocaleString()} SIMULATIONS</div>
-    <div class="big">${teamFlag(top)} ${TEAMS[top].n}</div>
-    <div class="pct">wins it all in ${pct(SIM.title[top],n)} of simulated tournaments · most likely final: <b style="color:var(--gold)">${fpBest[0].split(' v ').map(c=>teamFlag(c)+' '+TEAMS[c].n).join(' vs ')}</b> (${pct(fpBest[1],n)})</div>
-    ${predUpdatedAt?`<div class="pct" style="margin-top:6px;font-size:11px">Predictions updated ${predUpdatedAt.toLocaleTimeString()} · ${n.toLocaleString()} simulations</div>`:''}
-  </div>
+  let html=renderBracket();
+  html+=`${predUpdatedAt?`<div class="pct" style="margin:-10px 0 18px;font-size:11px;color:var(--muted);font-family:var(--mono)">Predictions updated ${predUpdatedAt.toLocaleTimeString()} · ${n.toLocaleString()} simulations</div>`:''}
   <div class="secl">Title odds — top 12</div><div class="odds">`;
   const mx=SIM.title[top]/n;
   rank.slice(0,12).forEach((c,i)=>{
@@ -1224,19 +1492,9 @@ function renderPredictions(){
     <span class="opc">${pct(SIM.title[c],n)}</span></div>`;
   });
   /* per-match prediction cards removed — match-wise AI takes now live in the
-     Live & Upcoming tab (Serper-enriched deep takes on each match card). */
-  html+='</div><div class="secl">Group-by-group: advancement odds</div>';
-  for(const g of 'ABCDEFGHIJKL'){
-    const teams=[...new Set(GS.filter(m=>m[3]===g).flatMap(m=>[m[4],m[5]]))];
-    teams.sort((x,y)=>SIM.advCount[y]-SIM.advCount[x]);
-    html+=`<div class="pgroup"><h3>GROUP <span>${g}</span></h3>
-    <div class="qline">Reach the knockouts → ${teams.map(c=>`${teamFlag(c)} ${c} <b>${pct(SIM.advCount[c],n)}</b>`).join(' &nbsp;·&nbsp; ')}<br>Win the group → ${teams.map(c=>`${c} ${pct(SIM.winGrp[c],n)}`).join(' · ')}</div></div>`;
-  }
-  const sfNames=rank.slice(0,4);
-  html+=`<div class="secl">Projected road to MetLife — July 19</div>
-  <div class="koproj">Most frequent semifinal cast → <b>${sfNames.map(c=>teamFlag(c)+' '+TEAMS[c].n).join('</b> · <b>')}</b><br>
-  Most likely final → <span class="f">${fpBest[0].split(' v ').map(c=>teamFlag(c)+' '+TEAMS[c].n).join('  vs  ')}</span> &nbsp;(${pct(fpBest[1],n)} of sims)<br>
-  Champion call → <span class="f">🏆 ${TEAMS[top].n} (${pct(SIM.title[top],n)})</span> — re-runs automatically as real results lock in.</div>`;
+     Live & Upcoming tab (Serper-enriched deep takes on each match card).
+     Group-by-group advancement odds removed — now lives in Schedules & Scores > Groups. */
+  html+='</div>';
   /* AI analysis — cached against predFingerprint(); regenerated only when a match ends.
      New shape {takes:{anthropic,openai}} renders as a Claude/GPT toggle; legacy {text} still works. */
   const pa=state.predAnalysis,fresh=pa&&pa.fingerprint===predFingerprint();
@@ -1794,6 +2052,7 @@ function init(){
   });
 }
 init();
+fetch('/api/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:document.referrer,page:location.pathname})}).catch(()=>{});
 </script>
 </body>
 </html>

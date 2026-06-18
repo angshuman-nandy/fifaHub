@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WC26 Hub — Analytics</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --pitch:#0A1611;
+  --panel:#101F17;
+  --panel-2:#15291E;
+  --line:#22402F;
+  --chalk:#EFF6EF;
+  --muted:#8BA796;
+  --green:#00C277;
+  --red:#E8474C;
+  --gold:#EFC94C;
+  --blue:#5AA9E6;
+  --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--pitch);color:var(--chalk);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+.wrap{max-width:1200px;margin:0 auto;padding:24px 16px 60px}
+header{text-align:center;padding:24px 0 32px}
+header h1{font-size:28px;font-weight:800;letter-spacing:-.02em}
+header h1 span{color:var(--green)}
+header p{color:var(--muted);font-size:13px;margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:28px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.stat .val{font-size:32px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums}
+.stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-top:2px}
+#map{width:100%;height:420px;border-radius:12px;border:1px solid var(--line);margin-bottom:28px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+.card h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:16px}
+canvas{max-height:220px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em;padding:6px 10px;border-bottom:1px solid var(--line)}
+td{padding:8px 10px;border-bottom:1px solid rgba(34,64,47,.5);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.flag{font-size:16px;margin-right:4px}
+.ua{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.ts{color:var(--muted);font-size:11px;white-space:nowrap}
+.ip{font-family:var(--mono);font-size:11px;color:var(--muted)}
+#status{text-align:center;color:var(--muted);padding:40px;font-size:14px}
+.leaflet-container{background:#0d1f16}
+/* override leaflet popup */
+.leaflet-popup-content-wrapper{background:var(--panel);color:var(--chalk);border:1px solid var(--line);border-radius:8px;box-shadow:none}
+.leaflet-popup-tip{background:var(--panel)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>WC26 Hub <span>Analytics</span></h1>
+    <p id="subtitle">Loading…</p>
+  </header>
+
+  <div class="stats" id="statsRow"></div>
+
+  <div id="map"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Top Countries</h2>
+      <canvas id="countryChart"></canvas>
+    </div>
+    <div class="card">
+      <h2>Visits over time (hourly)</h2>
+      <canvas id="timeChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Recent Visitors</h2>
+    <table id="recentTable">
+      <thead><tr>
+        <th>Time (UTC)</th>
+        <th>Location</th>
+        <th>IP</th>
+        <th>Referrer</th>
+        <th>User Agent</th>
+      </tr></thead>
+      <tbody id="recentBody"></tbody>
+    </table>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<script>
+const KEY = new URLSearchParams(location.search).get('key') || location.hash.replace('#','');
+
+const COUNTRY_FLAGS = {
+  US:'🇺🇸',GB:'🇬🇧',IN:'🇮🇳',DE:'🇩🇪',FR:'🇫🇷',BR:'🇧🇷',CA:'🇨🇦',AU:'🇦🇺',JP:'🇯🇵',
+  KR:'🇰🇷',NL:'🇳🇱',ES:'🇪🇸',IT:'🇮🇹',MX:'🇲🇽',PL:'🇵🇱',RU:'🇷🇺',SG:'🇸🇬',CN:'🇨🇳',
+  AR:'🇦🇷',ZA:'🇿🇦',NG:'🇳🇬',PK:'🇵🇰',BD:'🇧🇩',SE:'🇸🇪',NO:'🇳🇴',DK:'🇩🇰',FI:'🇫🇮',
+  PT:'🇵🇹',TR:'🇹🇷',UA:'🇺🇦',EG:'🇪🇬',MA:'🇲🇦',GH:'🇬🇭',TZ:'🇹🇿',KE:'🇰🇪',ID:'🇮🇩',
+  TH:'🇹🇭',VN:'🇻🇳',PH:'🇵🇭',MY:'🇲🇾',NZ:'🇳🇿',CO:'🇨🇴',CL:'🇨🇱',PE:'🇵🇪',SA:'🇸🇦',
+  AE:'🇦🇪',QA:'🇶🇦',IR:'🇮🇷',IQ:'🇮🇶',CH:'🇨🇭',AT:'🇦🇹',BE:'🇧🇪',CZ:'🇨🇿',HU:'🇭🇺',
+};
+
+function flag(cc){ return COUNTRY_FLAGS[cc] || '🌐'; }
+
+function esc(s){ const d=document.createElement('div');d.textContent=s||'';return d.innerHTML; }
+
+function fmtTime(iso){
+  try{ return new Date(iso).toISOString().replace('T',' ').slice(0,19); }catch(e){ return iso||''; }
+}
+
+function truncateUA(ua){
+  if(!ua) return '';
+  const m = ua.match(/(Chrome|Firefox|Safari|Edge|OPR|curl|python|Go-http)[\/\s][\d.]+/i);
+  return m ? m[0] : ua.slice(0,40);
+}
+
+// ── Map ──────────────────────────────────────────────────────────────────────
+const map = L.map('map',{
+  center:[20,0], zoom:2,
+  minZoom:1, maxZoom:10,
+  worldCopyJump:true,
+});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap © CARTO',
+  subdomains:'abcd', maxZoom:19,
+}).addTo(map);
+
+const markerGroup = L.layerGroup().addTo(map);
+
+function plotMarkers(visitors){
+  markerGroup.clearLayers();
+  // cluster by ~1° grid cell to avoid overplotting
+  const cells = {};
+  for(const v of visitors){
+    if(v.lat==null||v.lon==null) continue;
+    const k = `${Math.round(v.lat)},${Math.round(v.lon)}`;
+    if(!cells[k]) cells[k]={lat:v.lat,lon:v.lon,count:0,samples:[]};
+    cells[k].count++;
+    if(cells[k].samples.length<3) cells[k].samples.push(v);
+  }
+  for(const c of Object.values(cells)){
+    const r = Math.min(4 + Math.log2(c.count+1)*3, 20);
+    const circle = L.circleMarker([c.lat,c.lon],{
+      radius:r, color:'#00C277', fillColor:'#00C277',
+      fillOpacity:0.55, weight:1.5, opacity:0.8,
+    });
+    const rows = c.samples.map(v=>
+      `<div style="margin-bottom:4px"><b>${esc(flag(v.countryCode))} ${esc(v.city||v.country||'Unknown')}</b>`+
+      `<br><span style="color:#8BA796;font-size:11px">${esc(fmtTime(v.iso))}</span></div>`
+    ).join('');
+    circle.bindPopup(`${rows}${c.count>3?`<span style="color:#8BA796;font-size:11px">+${c.count-3} more</span>`:''}`,{maxWidth:220});
+    markerGroup.addLayer(circle);
+  }
+}
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+let countryChart, timeChart;
+
+function buildCountryChart(topCountries){
+  const labels = topCountries.map(([cc])=> `${flag(cc)} ${cc}`);
+  const values = topCountries.map(([,n])=>n);
+  if(countryChart) countryChart.destroy();
+  countryChart = new Chart(document.getElementById('countryChart'),{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{data:values,backgroundColor:'#00C27799',borderColor:'#00C277',borderWidth:1,borderRadius:4}]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8BA796',font:{size:11}},grid:{color:'#22402F'}},
+        y:{ticks:{color:'#8BA796',font:{size:11},stepSize:1},grid:{color:'#22402F'},beginAtZero:true},
+      },
+    }
+  });
+}
+
+function buildTimeChart(visitors){
+  // bucket by hour
+  const buckets = {};
+  const now = Date.now();
+  const cutoff = now - 72*3600*1000; // last 72 h
+  for(const v of visitors){
+    const ts = v.ts*1000;
+    if(ts < cutoff) continue;
+    const h = new Date(ts);
+    h.setMinutes(0,0,0);
+    const key = h.toISOString().slice(0,13);
+    buckets[key] = (buckets[key]||0)+1;
+  }
+  const keys = Object.keys(buckets).sort();
+  const labels = keys.map(k=> k.replace('T',' ')+'h');
+  const values = keys.map(k=>buckets[k]);
+  if(timeChart) timeChart.destroy();
+  timeChart = new Chart(document.getElementById('timeChart'),{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{data:values,backgroundColor:'#5AA9E680',borderColor:'#5AA9E6',borderWidth:1,borderRadius:3,label:'visits'}]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8BA796',font:{size:9},maxTicksLimit:12},grid:{color:'#22402F'}},
+        y:{ticks:{color:'#8BA796',font:{size:11},stepSize:1},grid:{color:'#22402F'},beginAtZero:true},
+      },
+    }
+  });
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+function buildTable(visitors){
+  const tbody = document.getElementById('recentBody');
+  tbody.innerHTML = visitors.slice(0,100).map(v=>`
+    <tr>
+      <td class="ts">${esc(fmtTime(v.iso))}</td>
+      <td>${esc(flag(v.countryCode))} ${esc(v.city&&v.country?v.city+', '+v.country:v.country||'Unknown')}</td>
+      <td class="ip">${esc(v.ip||'')}</td>
+      <td class="ua">${esc(v.ref||'—')}</td>
+      <td class="ua">${esc(truncateUA(v.ua))}</td>
+    </tr>
+  `).join('');
+}
+
+// ── Stats row ────────────────────────────────────────────────────────────────
+function buildStats(data){
+  const uniqueCountries = new Set(data.recent.map(v=>v.countryCode).filter(Boolean)).size;
+  const items = [
+    {val: data.total,     lbl:'Total Visits'},
+    {val: data.uniqueIPs, lbl:'Unique Visitors'},
+    {val: data.topCountries.length, lbl:'Countries'},
+    {val: data.topCities.length,    lbl:'Cities'},
+  ];
+  document.getElementById('statsRow').innerHTML = items.map(i=>
+    `<div class="stat"><div class="val">${i.val}</div><div class="lbl">${i.lbl}</div></div>`
+  ).join('');
+}
+
+// ── Load ─────────────────────────────────────────────────────────────────────
+async function load(){
+  const url = '/api/analytics'+(KEY?`?key=${encodeURIComponent(KEY)}`:'');
+  try{
+    const r = await fetch(url);
+    if(!r.ok){
+      document.getElementById('status').textContent = r.status===403
+        ? 'Access denied — add ?key=YOUR_ANALYTICS_KEY to the URL.'
+        : `Error ${r.status}`;
+      return;
+    }
+    const data = await r.json();
+    document.getElementById('subtitle').textContent =
+      `${data.total} visits · ${data.uniqueIPs} unique IPs · auto-refreshes every 60s`;
+
+    buildStats(data);
+    plotMarkers(data.recent);
+    buildCountryChart(data.topCountries);
+    buildTimeChart(data.recent);
+    buildTable(data.recent);
+  }catch(e){
+    document.getElementById('status').textContent = 'Failed to load analytics: '+e.message;
+  }
+}
+
+load();
+setInterval(load, 60_000);
+</script>
+</body>
+</html>

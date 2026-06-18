@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+from collections import Counter
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -58,6 +59,8 @@ def _cache_set(key, payload):
 NARRATIVE_CACHE_FILE = "narrative_cache.json"
 CACHE_DATASET = os.environ.get("CACHE_DATASET", "")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
+ANALYTICS_KEY = os.environ.get("ANALYTICS_KEY", "")
+VISITOR_LOG_FILE = "visitor_log.json"
 
 
 def _load_narratives():
@@ -116,6 +119,98 @@ def _narrative_store(key, text):
             pass  # not inside the event loop — sync will happen on a later store
 
 
+def _load_visitors():
+    data = []
+    if CACHE_DATASET and HF_TOKEN:
+        try:
+            from huggingface_hub import hf_hub_download
+            p = hf_hub_download(repo_id=CACHE_DATASET, repo_type="dataset",
+                                filename=VISITOR_LOG_FILE, token=HF_TOKEN)
+            with open(p) as f:
+                data = json.load(f)
+        except Exception:
+            pass
+    try:
+        with open(VISITOR_LOG_FILE) as f:
+            local = json.load(f)
+        # merge: keep entries from HF that aren't in local (older history),
+        # then append local entries (more recent than last upload)
+        local_ts = {v["ts"] for v in local}
+        merged = [v for v in data if v["ts"] not in local_ts] + local
+        merged.sort(key=lambda v: v["ts"])
+        data = merged
+    except Exception:
+        pass
+    return data
+
+
+_visitors: list = _load_visitors()
+_ip_geo_cache: dict = {}
+_visitor_upload_task = None
+
+
+async def _upload_visitors_soon():
+    global _visitor_upload_task
+    await asyncio.sleep(30)
+    _visitor_upload_task = None
+    try:
+        with open(VISITOR_LOG_FILE, "w") as f:
+            json.dump(_visitors[-2000:], f)
+    except Exception:
+        pass
+    try:
+        from huggingface_hub import HfApi
+        await asyncio.to_thread(
+            HfApi(token=HF_TOKEN).upload_file,
+            path_or_fileobj=VISITOR_LOG_FILE,
+            path_in_repo=VISITOR_LOG_FILE,
+            repo_id=CACHE_DATASET, repo_type="dataset",
+            commit_message="visitor log sync",
+        )
+    except Exception:
+        pass
+
+
+async def _geolocate(ip: str) -> dict:
+    if ip in _ip_geo_cache:
+        return _ip_geo_cache[ip]
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                f"http://ip-api.com/json/{ip}",
+                params={"fields": "status,city,country,countryCode,lat,lon"},
+            )
+        data = r.json()
+        if data.get("status") == "success":
+            geo = {
+                "city": data.get("city", ""),
+                "country": data.get("country", ""),
+                "countryCode": data.get("countryCode", ""),
+                "lat": data.get("lat"),
+                "lon": data.get("lon"),
+            }
+        else:
+            geo = {"city": "", "country": "", "countryCode": "", "lat": None, "lon": None}
+    except Exception:
+        geo = {"city": "", "country": "", "countryCode": "", "lat": None, "lon": None}
+    _ip_geo_cache[ip] = geo
+    return geo
+
+
+def _persist_visitors():
+    global _visitor_upload_task
+    try:
+        with open(VISITOR_LOG_FILE, "w") as f:
+            json.dump(_visitors[-2000:], f)
+    except Exception:
+        pass
+    if CACHE_DATASET and HF_TOKEN and _visitor_upload_task is None:
+        try:
+            _visitor_upload_task = asyncio.get_running_loop().create_task(_upload_visitors_soon())
+        except RuntimeError:
+            pass
+
+
 def _stage_from_text(*texts):
     t = " ".join(s for s in texts if s).lower().replace("-", " ")
     if "round of 32" in t:
@@ -158,6 +253,9 @@ def _normalize_scoreboard(data, include_upcoming=False):
         season_slug = ((ev.get("season") or {}).get("slug")) or ""
         stage = _stage_from_text(season_slug, note_head, ev.get("name"), ev.get("shortName"))
 
+        date = comp.get("date") or ev.get("date") or ""
+        venue = ((comp.get("venue") or {}).get("fullName")) or ""
+
         if state == "pre":
             # not started yet — no score/scorers, but the espnId lets the frontend
             # fetch lineups (Squad & Formations) once ESPN publishes them
@@ -172,6 +270,8 @@ def _normalize_scoreboard(data, include_upcoming=False):
                 "stage": stage,
                 "scorers": [],
                 "espnId": str(ev.get("id") or ""),
+                "date": date,
+                "venue": venue,
             })
             continue
 
@@ -215,6 +315,8 @@ def _normalize_scoreboard(data, include_upcoming=False):
             "stage": stage,
             "scorers": scorers,
             "espnId": str(ev.get("id") or ""),
+            "date": date,
+            "venue": venue,
         })
     return matches
 
@@ -249,6 +351,8 @@ def _normalize_fifa(data, include_upcoming=False):
 
         stage_name = r.get("StageName") or []
         stage_text = stage_name[0].get("Description", "") if stage_name else ""
+        stadium_name = r.get("Stadium", {}).get("Name") or []
+        venue = stadium_name[0].get("Description", "") if stadium_name else ""
         matches.append({
             "home": (home.get("Abbreviation") or "").upper(),
             "away": (away.get("Abbreviation") or "").upper(),
@@ -260,6 +364,8 @@ def _normalize_fifa(data, include_upcoming=False):
             "stage": _stage_from_text(stage_text),
             "scorers": [],
             "espnId": "",
+            "date": r.get("Date") or "",
+            "venue": venue,
         })
     return matches
 
@@ -281,10 +387,20 @@ ESPN_TEAM_IDS = {
 with open("static/index.html") as f:
     INDEX_HTML = f.read()
 
+with open("static/analytics.html") as f:
+    ANALYTICS_HTML = f.read()
+
 
 @app.get("/")
 async def index():
     return HTMLResponse(INDEX_HTML)
+
+
+@app.get("/analytics")
+async def analytics_page(key: str = ""):
+    if ANALYTICS_KEY and key != ANALYTICS_KEY:
+        raise HTTPException(403, "Invalid key")
+    return HTMLResponse(ANALYTICS_HTML)
 
 
 @app.post("/api/claude")
@@ -414,6 +530,53 @@ async def llm_proxy(request: Request):
     if isinstance(cache_key, str) and cache_key and text:
         _narrative_store(cache_key, text)
     return {"text": text, "provider": provider, "model": model}
+
+
+@app.post("/api/track")
+async def track_visit(request: Request):
+    xff = request.headers.get("x-forwarded-for", "")
+    ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    geo = await _geolocate(ip)
+    entry = {
+        "ts": time.time(),
+        "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ip": ip,
+        **geo,
+        "ua": request.headers.get("user-agent", "")[:200],
+        "ref": str(body.get("ref", ""))[:200],
+        "page": str(body.get("page", "/"))[:100],
+    }
+    _visitors.append(entry)
+    if len(_visitors) > 5000:
+        _visitors.pop(0)
+    _persist_visitors()
+    return {"ok": True}
+
+
+@app.get("/api/analytics")
+async def analytics(key: str = ""):
+    if ANALYTICS_KEY and key != ANALYTICS_KEY:
+        raise HTTPException(403, "Invalid key")
+    recent = _visitors[-200:][::-1]  # newest first
+    # aggregate by country
+    countries = Counter(v["countryCode"] for v in _visitors if v.get("countryCode"))
+    cities = Counter(
+        f"{v['city']}, {v['countryCode']}" for v in _visitors
+        if v.get("city") and v.get("countryCode")
+    )
+    unique_ips = len({v["ip"] for v in _visitors})
+    return {
+        "total": len(_visitors),
+        "uniqueIPs": unique_ips,
+        "topCountries": countries.most_common(10),
+        "topCities": cities.most_common(10),
+        "recent": recent[:100],
+    }
 
 
 @app.get("/api/standings")
