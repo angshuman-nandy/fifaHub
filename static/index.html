@@ -280,10 +280,12 @@ td.pts{font-weight:700;color:var(--chalk)}
 /* ---------- projected bracket ---------- */
 .brkhint{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);margin:2px 0 10px;text-transform:uppercase}
 .brkscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:26px;padding-bottom:8px}
-.brkgrid{display:flex;gap:28px;min-width:max-content;align-items:stretch;height:600px}
+.brkheaders{display:flex;gap:28px;min-width:max-content;margin-bottom:8px}
+.brkgrid{display:flex;gap:28px;min-width:max-content;align-items:stretch}
 .brkcol{display:flex;flex-direction:column;justify-content:space-around;min-width:158px}
 .brkcol.brkchampcol{justify-content:center;min-width:170px}
-.brkch{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;text-align:center;margin-bottom:8px;position:sticky;top:0}
+.brkch{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;text-align:center;min-width:158px}
+.brkch.champ{min-width:170px}
 .brknode{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:12px;position:relative}
 .brknode.played{border-color:#2e4f3a}
 .brkrow{display:flex;align-items:center;gap:6px;padding:7px 9px}
@@ -311,8 +313,8 @@ td.pts{font-weight:700;color:var(--chalk)}
   .mgrid{grid-template-columns:1fr}
   .orow{grid-template-columns:24px 22px 1fr 52px}
   .lineups{grid-template-columns:1fr}
-  .brkcol{min-width:130px}
-  .brkgrid{gap:18px;height:540px}
+  .brkcol,.brkch{min-width:130px}
+  .brkheaders,.brkgrid{gap:18px}
   .brkrow .bn{font-size:11px}
 }
 </style>
@@ -1462,19 +1464,31 @@ function brkNode(node){
 function renderBracket(){
   if(!SIM)return'';
   const{rounds,champ}=projectBracket();
-  const col=(title,nodes)=>`<div class="brkcol"><div class="brkch">${title}</div>${nodes.map(brkNode).join('')}</div>`;
+  /* headers live in their own flex row, separate from the node columns below — if a
+     header shared the same space-around flex container as the nodes it would count as
+     an extra item and throw off the vertical centering math for every round. */
+  const col=nodes=>`<div class="brkcol">${nodes.map(brkNode).join('')}</div>`;
   const champHTML=champ
     ?`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">${teamFlag(champ)}</div><div class="cname">${esc(TEAMS[champ].n)}</div><div class="cpct">title in ${pct(SIM.title[champ],SIM.n)} of all sims</div></div>`
     :`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">⏳</div><div class="cname">TBD</div><div class="cnote">awaiting the Round of 16</div></div>`;
   return`<div class="secl">Projected bracket — the chalk path</div>
   <div class="brkhint">SWIPE TO FOLLOW THE PATH →</div>
-  <div class="brkscroll"><div class="brkgrid">
-    ${col('ROUND OF 16',rounds.R16)}
-    ${col('QUARTERFINAL',rounds.QF)}
-    ${col('SEMIFINAL',rounds.SF)}
-    ${col('FINAL',rounds.F)}
-    <div class="brkcol brkchampcol"><div class="brkch">CHAMPION</div>${champHTML}</div>
-  </div></div>`;
+  <div class="brkscroll">
+    <div class="brkheaders">
+      <div class="brkch">ROUND OF 16</div>
+      <div class="brkch">QUARTERFINAL</div>
+      <div class="brkch">SEMIFINAL</div>
+      <div class="brkch">FINAL</div>
+      <div class="brkch champ">CHAMPION</div>
+    </div>
+    <div class="brkgrid">
+      ${col(rounds.R16)}
+      ${col(rounds.QF)}
+      ${col(rounds.SF)}
+      ${col(rounds.F)}
+      <div class="brkcol brkchampcol">${champHTML}</div>
+    </div>
+  </div>`;
 }
 function renderPredictions(){
   if(!SIM)return;
