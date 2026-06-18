@@ -35,11 +35,14 @@ header p{color:var(--muted);font-size:13px;margin-top:4px}
 #map{width:100%;height:420px;border-radius:12px;border:1px solid var(--line);margin-bottom:28px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 @media(max-width:640px){.grid2{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;max-width:100%}
 .card h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:16px}
-canvas{max-height:220px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em;padding:6px 10px;border-bottom:1px solid var(--line)}
+canvas{max-height:220px;max-width:100%}
+/* the visitors table is wide (6 columns) — scroll it horizontally inside its own
+   card instead of letting it force the whole page to overflow sideways on mobile */
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -20px;padding:0 20px}
+table{width:100%;min-width:640px;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.1em;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid rgba(34,64,47,.5);vertical-align:top}
 tr:last-child td{border-bottom:none}
 .flag{font-size:16px;margin-right:4px}
@@ -51,6 +54,19 @@ tr:last-child td{border-bottom:none}
 /* override leaflet popup */
 .leaflet-popup-content-wrapper{background:var(--panel);color:var(--chalk);border:1px solid var(--line);border-radius:8px;box-shadow:none}
 .leaflet-popup-tip{background:var(--panel)}
+
+@media(max-width:560px){
+  .wrap{padding:16px 12px 40px}
+  header{padding:14px 0 20px}
+  header h1{font-size:22px}
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat{padding:12px 14px}
+  .stat .val{font-size:24px}
+  #map{height:280px}
+  .card{padding:14px}
+  .tablewrap{margin:0 -14px;padding:0 14px}
+  .ua{max-width:140px}
+}
 </style>
 </head>
 <body>
@@ -77,17 +93,19 @@ tr:last-child td{border-bottom:none}
 
   <div class="card">
     <h2>Recent Visitors</h2>
-    <table id="recentTable">
-      <thead><tr>
-        <th>Time (IST)</th>
-        <th>Location</th>
-        <th>Network</th>
-        <th>IP</th>
-        <th>Referrer</th>
-        <th>User Agent</th>
-      </tr></thead>
-      <tbody id="recentBody"></tbody>
-    </table>
+    <div class="tablewrap">
+      <table id="recentTable">
+        <thead><tr>
+          <th>Time (IST)</th>
+          <th>Location</th>
+          <th>Network</th>
+          <th>IP</th>
+          <th>Referrer</th>
+          <th>User Agent</th>
+        </tr></thead>
+        <tbody id="recentBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div id="status"></div>
