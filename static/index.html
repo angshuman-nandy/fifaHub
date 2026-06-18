@@ -712,22 +712,47 @@ function renderSchedule(){
   updateRail();
   observeMatchPreds(); /* lazy-generate AI picks for cards as they scroll into view */
 }
-/* "Live & Upcoming": today's live match (if any) plus today's remaining kickoffs —
-   finished-today matches drop off once full time so the tab stays focused on what's next */
+/* scrolls the Fixtures list to today's day section (or the next upcoming day if today
+   has none, or the last day once the tournament is over) — called whenever the Fixtures
+   subtab becomes visible so it never opens scrolled to the very top (Jun 11). */
+function scrollScheduleToToday(){
+  const todayISO=todayIST();
+  const ms=allMatches();
+  if(!ms.length)return;
+  const target=ms.find(m=>m.iso===todayISO)||ms.find(m=>m.iso>todayISO)||ms[ms.length-1];
+  for(const h of $$('#schedList .day h3')){
+    if(h.textContent===target.d){h.closest('.day').scrollIntoView({behavior:'smooth',block:'start'});return}
+  }
+}
+/* "Live & Upcoming": today's live match (if any) plus today's AND tomorrow's remaining
+   kickoffs — finished matches drop off once full time so the tab stays focused on what's
+   next. Grouped into Today/Tomorrow day sections (a still-live match that kicked off
+   "yesterday" IST keeps showing under its own real date, per the original behavior). */
 function renderLiveUpcoming(){
   const now=new Date();
   const todayISO=now.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  const todayLabel=now.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',month:'short',day:'numeric'});
+  const tomorrow=new Date(now.getTime()+24*3600*1000);
+  const tomorrowISO=tomorrow.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
   const ms=allMatches().filter(m=>{
     const r=state.results[m.id];
     if(r&&r.status==='FT') return false;
     if(r&&r.status==='LIVE') return true; /* in progress — keep showing even if it kicked off "yesterday" IST */
-    return m.iso===todayISO;
+    return m.iso===todayISO||m.iso===tomorrowISO;
   }).sort((a,b)=>a.ts-b.ts);
-  if(!ms.length){$('#liveList').innerHTML='<div class="empty">No live or upcoming matches today.</div>';return}
-  $('#liveList').innerHTML=`<div class="day"><h3>Today</h3><span class="dn">${esc(todayLabel)}</span></div><div class="mgrid">${ms.map(m=>bugHTML(m,{full:true})).join('')}</div>`;
+  if(!ms.length){$('#liveList').innerHTML='<div class="empty">No live or upcoming matches in the next day.</div>';return}
+  const dayLabel=iso=>iso===todayISO?'Today':(iso===tomorrowISO?'Tomorrow':'Live');
+  let html='',day='';
+  for(const m of ms){
+    if(m.d!==day){
+      html+=day?'</div>':'';
+      day=m.d;
+      html+=`<div class="day"><h3>${esc(dayLabel(m.iso))}</h3><span class="dn">${esc(m.d)}</span></div><div class="mgrid">`;
+    }
+    html+=bugHTML(m,{full:true});
+  }
+  $('#liveList').innerHTML=html+'</div>';
   observeMatchPreds(); /* lazy-load compact picks (STAT + Claude) */
-  scheduleDeepPredsForDay(); /* batch-generate Serper-enriched deep takes for today */
+  scheduleDeepPredsForDay(); /* batch-generate Serper-enriched deep takes for the earliest non-FT day */
 }
 function updateRail(){
   const order=['GS','R32','R16','QF','SF','F'];
@@ -2017,12 +2042,16 @@ function init(){
       if(liveMatch)$('#bdSelect').value=liveMatch.id;
       genBreakdown();
     }
+    if(t.dataset.pane==='p-sched'&&$('.subtab[data-view="fixtures"]').classList.contains('on')){
+      requestAnimationFrame(scrollScheduleToToday);
+    }
   }));
   $$('.subtab').forEach(t=>t.addEventListener('click',()=>{
     $$('.subtab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
     $('#view-fixtures').style.display=t.dataset.view==='fixtures'?'':'none';
     $('#view-live').style.display=t.dataset.view==='live'?'':'none';
     $('#view-standings').style.display=t.dataset.view==='standings'?'':'none';
+    if(t.dataset.view==='fixtures')requestAnimationFrame(scrollScheduleToToday);
   }));
   ['fStage','fGroup','fDate'].forEach(i=>$('#'+i).addEventListener('change',renderSchedule));
   $('#fTeam').addEventListener('input',renderSchedule);
