@@ -139,7 +139,7 @@ tr.q td.t::after{content:' •';color:var(--green)}
 td.pts{font-weight:700;color:var(--chalk)}
 
 /* ---------- predictions ---------- */
-.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6}
+.note{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:8px;padding:12px 16px;font-size:13px;color:var(--muted);margin-top:20px;margin-bottom:20px;line-height:1.6}
 .note b{color:var(--chalk)}
 .champ{
   background:linear-gradient(135deg,var(--panel) 0%,#1A2E12 100%);
@@ -318,7 +318,7 @@ td.pts{font-weight:700;color:var(--chalk)}
 @media(min-width:680px){.lb-grid{grid-template-columns:1fr 1fr}.lb-full{grid-column:1/-1}}
 .lb-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 18px}
 .lb-hd{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:space-between}
-.lb-hero{position:relative;overflow:hidden;border:1px solid #5a5226;border-radius:18px;padding:24px 22px;
+.lb-hero{position:relative;overflow:hidden;border:1px solid #5a5226;border-radius:18px;padding:24px 22px;margin-bottom:16px;
   box-shadow:0 8px 30px rgba(239,201,76,.10);
   background:radial-gradient(circle at 82% 120%,rgba(239,201,76,.20),transparent 58%),linear-gradient(120deg,#16210f,#101F17);
   animation:lbFadeUp .5s ease}
@@ -479,16 +479,16 @@ td.pts{font-weight:700;color:var(--chalk)}
 
 <!-- ================= TAB 2 : PREDICTIONS ================= -->
 <section class="pane" id="p-pred">
+  <div id="predOut"><div class="empty">Crunching 10,000 tournaments…</div></div>
   <div class="note">
     <b>How this works.</b> Each team carries an Elo-style rating that updates dynamically as matches are played (with host-nation advantage for USA, Canada &amp; Mexico). Match probabilities use a Dixon-Coles corrected Poisson model; tournament odds come from <b>10,000 Monte Carlo simulations</b> of all remaining matches, run live in your browser. Confirmed results are locked in — predictions sharpen every time you pull fresh standings. The knockout bracket mapping for third-placed teams is an approximation of FIFA's allocation.
   </div>
-  <div id="predOut"><div class="empty">Crunching 10,000 tournaments…</div></div>
 </section>
 
 <!-- ================= TAB 4 : LEADERBOARDS ================= -->
 <section class="pane" id="p-lb">
-  <div class="note"><b>Tournament leaders.</b> Goals and team totals update instantly from live scores; card detail compiles briefly after a match ends; Player of the Match is an AI judgment per finished match and fills in progressively — aggregates from finished matches only, no live in-match updates.</div>
   <div id="lbOut"><div class="empty">Loading leaderboards…</div></div>
+  <div class="note"><b>Tournament leaders.</b> Goals and team totals update instantly from live scores; card detail compiles briefly after a match ends; Player of the Match is an AI judgment per finished match and fills in progressively — aggregates from finished matches only, no live in-match updates.</div>
 </section>
 
 <!-- ================= TAB 3 : BREAKDOWN ================= -->
@@ -666,9 +666,12 @@ const KO=[
 const KO_LABEL={k31:'Bronze Final',k32:'THE FINAL'};
 const STAGE_NAME={GS:'Group Stage',R32:'Round of 32',R16:'Round of 16',QF:'Quarterfinal',SF:'Semifinal',F:'Final'};
 /* Official WC26 bracket adjacency (verified against FIFA's published knockout tree,
-   matched to our KO slot ids by date+venue): which two R16 slots feed each QF slot,
-   which two QF slots feed each SF slot, and which two SF slots feed the Final. */
+   matched to our KO slot ids by date+venue): which two R32 slots feed each R16 slot,
+   which two R16 slots feed each QF slot, which two QF slots feed each SF slot, and
+   which two SF slots feed the Final. */
 const BRACKET={
+  k17:['k01','k04'], k18:['k03','k06'], k19:['k02','k05'], k20:['k07','k08'],
+  k21:['k12','k11'], k22:['k10','k09'], k23:['k15','k14'], k24:['k13','k16'],
   k25:['k17','k18'], k26:['k21','k22'], k27:['k19','k20'], k28:['k23','k24'],
   k29:['k25','k26'], k30:['k27','k28'],
   k32:['k29','k30']
@@ -1512,19 +1515,27 @@ function resolveNode(slot,stage,a,b){
   }
   return{slot,stage,a,b,winner:tp.winner,played:false,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:null,llm:tp.llm};
 }
+const R32_SLOTS=['k01','k02','k03','k04','k05','k06','k07','k08','k09','k10','k11','k12','k13','k14','k15','k16'];
 const R16_SLOTS=['k17','k18','k19','k20','k21','k22','k23','k24'];
 const QF_SLOTS=['k25','k26','k27','k28'];
 const SF_SLOTS=['k29','k30'];
 const F_SLOT='k32';
-/* projectBracket: pure & synchronous. Resolves R16→QF→SF→F stage by stage off real
+/* projectBracket: pure & synchronous. Resolves R32→R16→QF→SF→F stage by stage off real
    results + cached koPreds, so a real upset automatically re-derives every downstream
    pairing. Never enqueues LLM work — see refreshBracketPreds for that. */
 function projectBracket(){
   const winnerOf=n=>n?n.winner:null;
   const bySlot={};
+  const R32=R32_SLOTS.map(slot=>{
+    const kt=state.koTeams[slot];
+    const n=resolveNode(slot,'R32',kt&&kt.h,kt&&kt.a);
+    bySlot[slot]=n;return n;
+  });
   const R16=R16_SLOTS.map(slot=>{
     const kt=state.koTeams[slot];
-    const n=resolveNode(slot,'R16',kt&&kt.h,kt&&kt.a);
+    let n;
+    if(kt){n=resolveNode(slot,'R16',kt.h,kt.a)}
+    else{const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);n=resolveNode(slot,'R16',winnerOf(f0),winnerOf(f1))}
     bySlot[slot]=n;return n;
   });
   const QF=QF_SLOTS.map(slot=>{
@@ -1539,7 +1550,7 @@ function projectBracket(){
   });
   const[f0,f1]=BRACKET[F_SLOT].map(s=>bySlot[s]);
   const F=[resolveNode(F_SLOT,'F',winnerOf(f0),winnerOf(f1))];
-  return{rounds:{R16,QF,SF,F},champ:F[0].winner};
+  return{rounds:{R32,R16,QF,SF,F},champ:F[0].winner};
 }
 /* refreshBracketPreds: the ONLY place genKoPred is enqueued. Called from pullFresh after
    results are bound, never from a render. Walks the freshly-projected bracket and queues
@@ -1550,7 +1561,7 @@ function projectBracket(){
    it costs zero calls; only a mismatch (✗) produces new, cache-missing pairings here. */
 function refreshBracketPreds(){
   const{rounds}=projectBracket();
-  const nodes=[...rounds.R16,...rounds.QF,...rounds.SF,...rounds.F];
+  const nodes=[...rounds.R32,...rounds.R16,...rounds.QF,...rounds.SF,...rounds.F];
   for(const n of nodes){
     if(n.played||!n.a||!n.b)continue;
     if(state.koPreds[koPairKey(n.a,n.b,n.stage)])continue;
@@ -1799,11 +1810,12 @@ function renderBracket(){
   const col=nodes=>`<div class="brkcol">${nodes.map(brkNode).join('')}</div>`;
   const champHTML=champ
     ?`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">${teamFlag(champ)}</div><div class="cname">${TEAMS[champ].n}</div><div class="cpct">title in ${pct(SIM.title[champ],SIM.n)} of all sims</div></div>`
-    :`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">⏳</div><div class="cname">TBD</div><div class="cnote">awaiting the Round of 16</div></div>`;
+    :`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">⏳</div><div class="cname">TBD</div><div class="cnote">awaiting the Round of 32</div></div>`;
   return`<div class="secl">Projected bracket — the chalk path</div>
   <div class="brkhint">SWIPE TO FOLLOW THE PATH →</div>
   <div class="brkscroll">
     <div class="brkheaders">
+      <div class="brkch">ROUND OF 32</div>
       <div class="brkch">ROUND OF 16</div>
       <div class="brkch">QUARTERFINAL</div>
       <div class="brkch">SEMIFINAL</div>
@@ -1811,6 +1823,7 @@ function renderBracket(){
       <div class="brkch champ">CHAMPION</div>
     </div>
     <div class="brkgrid">
+      ${col(rounds.R32)}
       ${col(rounds.R16)}
       ${col(rounds.QF)}
       ${col(rounds.SF)}
