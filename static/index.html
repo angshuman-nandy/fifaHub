@@ -282,7 +282,7 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:26px;padding-bottom:8px}
 .brkheaders{display:flex;gap:28px;min-width:max-content;margin-bottom:8px}
 .brkgrid{display:flex;gap:28px;min-width:max-content;align-items:stretch}
-.brkcol{display:flex;flex-direction:column;justify-content:space-around;min-width:158px}
+.brkcol{display:flex;flex-direction:column;justify-content:space-around;gap:6px;min-width:158px}
 .brkcol.brkchampcol{justify-content:center;min-width:170px}
 .brkch{font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;text-align:center;min-width:158px}
 .brkch.champ{min-width:170px}
@@ -301,6 +301,19 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkflag{font-family:var(--mono);font-size:11px;font-weight:700;margin-left:2px;flex-shrink:0}
 .brkflag.ok{color:var(--green)}
 .brkflag.no{color:var(--red)}
+.brkflag.pred{font-size:9px;font-weight:600;color:var(--gold);border:1px solid rgba(239,201,76,.4);padding:1px 5px;border-radius:3px;line-height:1.4}
+.brkflag.conf{font-size:9px;font-weight:600;color:var(--green);border:1px solid rgba(0,194,119,.35);padding:1px 5px;border-radius:3px;line-height:1.4}
+.brkrow.upset{background:rgba(239,201,76,.09);border-left:3px solid var(--gold)}
+.brkrow.upset .bn{font-weight:700;color:var(--chalk)}
+.brkrow.upset .bp{color:var(--gold)}
+.brkrow.mispred{opacity:.45}
+.brk-legend{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:4px 0 20px}
+.brk-legend .bl-hd{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.brk-legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px}
+.bl-item{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--chalk);line-height:1.4}
+.bl-item .bl-lbl{flex-shrink:0;margin-top:1px}
+.bl-item b{color:var(--chalk)}
+@media(max-width:520px){.brk-legend-grid{grid-template-columns:1fr}}
 .brkchamp{align-self:center;text-align:center;padding:20px 18px;border-radius:14px;border:1px solid var(--gold);background:linear-gradient(135deg,var(--panel) 0%,#1A2E12 100%);min-width:160px}
 .brkchamp .trophy{font-size:30px}
 .brkchamp .cflag{font-size:32px;margin-top:6px}
@@ -481,7 +494,7 @@ td.pts{font-weight:700;color:var(--chalk)}
 <section class="pane" id="p-pred">
   <div id="predOut"><div class="empty">Crunching 10,000 tournaments…</div></div>
   <div class="note">
-    <b>How this works.</b> Each team carries an Elo-style rating that updates dynamically as matches are played (with host-nation advantage for USA, Canada &amp; Mexico). Match probabilities use a Dixon-Coles corrected Poisson model; tournament odds come from <b>10,000 Monte Carlo simulations</b> of all remaining matches, run live in your browser. Confirmed results are locked in — predictions sharpen every time you pull fresh standings. The knockout bracket mapping for third-placed teams is an approximation of FIFA's allocation.
+    <b>How this works.</b> Each team carries an Elo-style rating that updates dynamically as matches are played (with host-nation advantage for USA, Canada &amp; Mexico). Match probabilities use a Dixon-Coles corrected Poisson model; tournament odds come from <b>10,000 Monte Carlo simulations</b> of all remaining matches, run live in your browser. Confirmed results are locked in — predictions sharpen every time you pull fresh standings. The knockout bracket draw follows the official FIFA WC26 rules (§12.6 / Annexe C) with bipartite slot assignment for the eight best third-placed teams.
   </div>
 </section>
 
@@ -1145,7 +1158,31 @@ async function fetchStandingsESPN(){
   return res.json();
 }
 /* resolve ESPN abbreviations / display names onto the app's TEAMS codes */
-const TEAM_ALIASES={'TURKEY':'TUR','TÜRKIYE':'TUR','SOUTH KOREA':'KOR','KOREA REPUBLIC':'KOR','CZECH REPUBLIC':'CZE','CZECHIA':'CZE','UNITED STATES':'USA','IR IRAN':'IRN','IRAN':'IRN','BOSNIA AND HERZEGOVINA':'BIH','BOSNIA & HERZEGOVINA':'BIH','CAPE VERDE':'CPV','CABO VERDE':'CPV','IVORY COAST':'CIV',"CÔTE D'IVOIRE":'CIV','DR CONGO':'COD','CONGO DR':'COD','NEW ZEALAND':'NZL','SAUDI ARABIA':'KSA','SOUTH AFRICA':'RSA'};
+const TEAM_ALIASES={
+  'TURKEY':'TUR','TÜRKIYE':'TUR','SOUTH KOREA':'KOR','KOREA REPUBLIC':'KOR',
+  'CZECH REPUBLIC':'CZE','CZECHIA':'CZE','UNITED STATES':'USA',
+  'IR IRAN':'IRN','IRAN':'IRN',
+  'BOSNIA AND HERZEGOVINA':'BIH','BOSNIA & HERZEGOVINA':'BIH',
+  'CAPE VERDE':'CPV','CABO VERDE':'CPV',
+  'IVORY COAST':'CIV',"CÔTE D'IVOIRE":'CIV',"COTE D'IVOIRE":'CIV',
+  'DR CONGO':'COD','CONGO DR':'COD','CONGO, DR':'COD','DRC':'COD',
+  'NEW ZEALAND':'NZL',
+  'SAUDI ARABIA':'KSA',
+  'SOUTH AFRICA':'RSA',
+  /* Teams whose FIFA/ESPN abbreviation may differ from our GS codes */
+  'HTI':'HAI','HAITI':'HAI',
+  'CUR':'CUW','CURACAO':'CUW','CURAÇAO':'CUW',
+  'IRAQ':'IRQ',
+  'ALGERIA':'ALG',
+  'JORDAN':'JOR',
+  'UZBEKISTAN':'UZB',
+  'PANAMA':'PAN',
+  'SENEGAL':'SEN','ECUADOR':'ECU','COLOMBIA':'COL','CLB':'COL',
+  'GHANA':'GHA','CROATIA':'CRO','AUSTRIA':'AUT','SCOTLAND':'SCO',
+  'MOROCCO':'MAR','PARAGUAY':'PAR','TUNISIA':'TUN','PORTUGAL':'POR',
+  'NORWAY':'NOR','SWEDEN':'SWE','SWITZERLAND':'SUI','BELGIUM':'BEL',
+  'AUSTRALIA':'AUS',
+};
 const NAME_TO_CODE={};Object.keys(TEAMS).forEach(c=>NAME_TO_CODE[TEAMS[c].n.replace(/&amp;/g,'&').toUpperCase()]=c);
 function toCode(abbr,name){
   const A=(abbr||'').toUpperCase().trim();
@@ -1515,8 +1552,32 @@ function resolveNode(slot,stage,a,b){
   }
   return{slot,stage,a,b,winner:tp.winner,played:false,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:null,llm:tp.llm};
 }
-const R32_SLOTS=['k01','k02','k03','k04','k05','k06','k07','k08','k09','k10','k11','k12','k13','k14','k15','k16'];
-const R16_SLOTS=['k17','k18','k19','k20','k21','k22','k23','k24'];
+/* Groups whose results must all be FT before each R32 slot is confirmed.
+   Non-Best3rd slots need only their two source groups; Best3rd slots need all
+   12 because the 8-team ranking can't be settled until every group is done. */
+const SLOT_REQ_GROUPS={
+  k01:'ABCDEFGHIJKL', k02:'CF',           k03:'AB',           k04:'ABCDEFGHIJKL',
+  k05:'EI',           k06:'CF',           k07:'ABCDEFGHIJKL', k08:'ABCDEFGHIJKL',
+  k09:'ABCDEFGHIJKL', k10:'ABCDEFGHIJKL', k11:'HJ',           k12:'KL',
+  k13:'ABCDEFGHIJKL', k14:'DG',           k15:'HJ',           k16:'ABCDEFGHIJKL'
+};
+function groupsDone(gs){
+  return[...gs].every(g=>GS.filter(m=>m[3]===g).every(m=>(state.results[m[0]]||{}).status==='FT'));
+}
+/* A team is done with their group stage once all their own matches are FT.
+   Used for non-Best3rd slots where only the specific teams' results matter. */
+function teamDone(code){
+  if(!code)return false;
+  const ms=GS.filter(m=>m[4]===code||m[5]===code);
+  return ms.length>0&&ms.every(m=>(state.results[m[0]]||{}).status==='FT');
+}
+const BEST3RD_SLOTS=new Set(['k01','k04','k07','k08','k09','k10','k13','k16']);
+
+/* Display order derived from the official bracket tree so each node sits
+   vertically centred between its two feeders in the previous column:
+   k29←(k25←k17,k18 / k26←k21,k22)  k30←(k27←k19,k20 / k28←k23,k24) */
+const R32_SLOTS=['k01','k04','k03','k06','k12','k11','k10','k09','k02','k05','k07','k08','k15','k14','k13','k16'];
+const R16_SLOTS=['k17','k18','k21','k22','k19','k20','k23','k24'];
 const QF_SLOTS=['k25','k26','k27','k28'];
 const SF_SLOTS=['k29','k30'];
 const F_SLOT='k32';
@@ -1526,9 +1587,18 @@ const F_SLOT='k32';
 function projectBracket(){
   const winnerOf=n=>n?n.winner:null;
   const bySlot={};
+  /* Use projected R32 pairings (from live standings) for slots not yet populated from ESPN */
+  const projR32=projectR32Teams();
   const R32=R32_SLOTS.map(slot=>{
     const kt=state.koTeams[slot];
-    const n=resolveNode(slot,'R32',kt&&kt.h,kt&&kt.a);
+    const h=kt?kt.h:(projR32[slot]?projR32[slot][0]:null);
+    const a=kt?kt.a:(projR32[slot]?projR32[slot][1]:null);
+    const n=resolveNode(slot,'R32',h,a);
+    /* per-team confirmed: each team shows CONFIRMED once their own group is fully FT.
+       Best3rd opponents still need all 12 groups done (ranking can't settle earlier). */
+    n.aConfirmed=!!kt||(!!h&&teamDone(h));
+    n.bConfirmed=!!kt||(!!a&&(BEST3RD_SLOTS.has(slot)?groupsDone('ABCDEFGHIJKL'):teamDone(a)));
+    n.confirmed=n.aConfirmed&&n.bConfirmed;
     bySlot[slot]=n;return n;
   });
   const R16=R16_SLOTS.map(slot=>{
@@ -1715,6 +1785,57 @@ function matchProbs(h,a){
 }
 function samplePois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(p>L);return k-1}
 
+/* Bipartite matching: given the 8 qualifying group letters (from the best 8 third-placed
+   teams), assign each to the correct "Best 3rd" R32 slot per FIFA WC26 §12.6 / Annexe C.
+   Eligible groups per slot come directly from the published draw rules. Uses augmenting-path
+   DFS — for any valid 8-of-12 combination the matching is always complete. */
+function assignThirdPlaceSlots(qualGroups){
+  const eligible={
+    k01:'ABCDF', k04:'CDFGH', k07:'CEFHI', k08:'EHIJK',
+    k09:'AEHIJ', k10:'BEFIJ', k13:'EFGIJ', k16:'DEIJL'
+  };
+  const slots=Object.keys(eligible);
+  const s2g={},g2s={};
+  function dfs(slot,seen){
+    for(const g of qualGroups){
+      if(!eligible[slot].includes(g)||seen.has(g))continue;
+      seen.add(g);
+      if(g2s[g]==null||dfs(g2s[g],seen)){s2g[slot]=g;g2s[g]=slot;return true;}
+    }
+    return false;
+  }
+  for(const slot of slots)dfs(slot,new Set());
+  return s2g; // {k01:'A', k04:'C', ...}
+}
+
+/* Derive the projected R32 pairings from current live group standings.
+   Uses computeTable() (real results) + Elo tiebreak for not-yet-played matches.
+   Called by projectBracket() for any R32 slot not yet populated from ESPN. */
+function projectR32Teams(){
+  const W={},R={},thirds=[];
+  for(const g of 'ABCDEFGHIJKL'){
+    const tbl=computeTable(g);
+    W[g]=tbl[0]?tbl[0].c:null;
+    R[g]=tbl[1]?tbl[1].c:null;
+    if(tbl[2])thirds.push({...tbl[2],g});
+  }
+  thirds.sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||TEAMS[y.c].elo-TEAMS[x.c].elo);
+  const best8=thirds.slice(0,8);
+  const qualGroups=best8.map(t=>t.g);
+  const s2g=assignThirdPlaceSlots(qualGroups);
+  const T3={};
+  for(const[slot,grp] of Object.entries(s2g)){
+    const entry=best8.find(x=>x.g===grp);
+    if(entry)T3[slot]=entry.c;
+  }
+  return{
+    k01:[W.E,T3.k01||null],  k02:[W.C,R.F],           k03:[R.A,R.B],           k04:[W.I,T3.k04||null],
+    k05:[R.E,R.I],            k06:[W.F,R.C],            k07:[W.A,T3.k07||null], k08:[W.L,T3.k08||null],
+    k09:[W.G,T3.k09||null],  k10:[W.D,T3.k10||null],  k11:[W.H,R.J],           k12:[R.K,R.L],
+    k13:[W.B,T3.k13||null],  k14:[R.D,R.G],            k15:[W.J,R.H],           k16:[W.K,T3.k16||null]
+  };
+}
+
 function simulateOnce(){
   const tables={};
   for(const g of 'ABCDEFGHIJKL'){
@@ -1730,29 +1851,40 @@ function simulateOnce(){
     tables[g]=Object.values(rows).sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||Math.random()-.5);
   }
   const W={},R={},thirds=[];
-  for(const g of 'ABCDEFGHIJKL'){W[g]=tables[g][0].c;R[g]=tables[g][1].c;thirds.push(tables[g][2])}
+  for(const g of 'ABCDEFGHIJKL'){W[g]=tables[g][0].c;R[g]=tables[g][1].c;if(tables[g][2])thirds.push({...tables[g][2],g})}
   thirds.sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||Math.random()-.5);
-  const T=thirds.slice(0,8).map(t=>t.c);
-  const adv=new Set([...Object.values(W),...Object.values(R),...T]);
-  /* R32 (bracket approximation) */
-  let rd=[[W.A,T[0]],[W.B,T[1]],[W.C,T[2]],[W.D,T[3]],[W.E,T[4]],[W.F,T[5]],[W.G,T[6]],[W.H,T[7]],
-          [W.I,R.A],[W.J,R.B],[W.K,R.C],[W.L,R.D],[R.E,R.F],[R.G,R.H],[R.I,R.J],[R.K,R.L]];
-  const stageReach={R16:[],QF:[],SF:[],F:[]};
-  function ko(pair){
-    const[lh,la]=lambdas(pair[0],pair[1]);
+  const best8=thirds.slice(0,8);
+  const adv=new Set([...Object.values(W),...Object.values(R),...best8.map(t=>t.c)]);
+  /* Assign best 8 third-placed teams to their correct R32 slots per FIFA WC26 §12.6 */
+  const s2g=assignThirdPlaceSlots(best8.map(t=>t.g));
+  const T3={};
+  for(const[slot,grp] of Object.entries(s2g)){const e=best8.find(x=>x.g===grp);if(e)T3[slot]=e.c;}
+  /* Official R32 matchups (§12.6, M73-M88) mapped to our k-slot ids */
+  function ko(h,a){
+    const[lh,la]=lambdas(h,a);
     const hs=samplePois(lh),as=samplePois(la);
-    if(hs!==as)return hs>as?pair[0]:pair[1];
-    const p=matchProbs(pair[0],pair[1]);
-    return Math.random()<p.pH/(p.pH+p.pA)?pair[0]:pair[1];
+    if(hs!==as)return hs>as?h:a;
+    const p=matchProbs(h,a);
+    return Math.random()<p.pH/(p.pH+p.pA)?h:a;
   }
-  while(rd.length>1){
-    const nx=[];for(const pr of rd)nx.push(ko(pr));
-    const key=rd.length===8?'QF':rd.length===4?'SF':rd.length===2?'F':rd.length===16?'R16':null;
-    rd=[];for(let i=0;i<nx.length;i+=2)rd.push([nx[i],nx[i+1]]);
-    if(rd.length===1)stageReach.F=rd[0];
-  }
-  const champ=ko(rd[0]);
-  return{tables,adv,finalists:rd[0],champ};
+  const bw={}; // slot -> winner
+  const r32={
+    k01:[W.E, T3.k01], k02:[W.C, R.F],   k03:[R.A, R.B],   k04:[W.I, T3.k04],
+    k05:[R.E, R.I],    k06:[W.F, R.C],   k07:[W.A, T3.k07], k08:[W.L, T3.k08],
+    k09:[W.G, T3.k09], k10:[W.D, T3.k10],k11:[W.H, R.J],    k12:[R.K, R.L],
+    k13:[W.B, T3.k13], k14:[R.D, R.G],   k15:[W.J, R.H],    k16:[W.K, T3.k16]
+  };
+  for(const[s,[h,a]] of Object.entries(r32))bw[s]=ko(h,a);
+  /* R16 per official bracket tree (§12.7, M89-M96) */
+  for(const[s,[p,q]] of Object.entries({k17:['k01','k04'],k18:['k03','k06'],k19:['k02','k05'],k20:['k07','k08'],k21:['k12','k11'],k22:['k10','k09'],k23:['k15','k14'],k24:['k13','k16']}))bw[s]=ko(bw[p],bw[q]);
+  /* QF (§12.8, M97-M100) */
+  for(const[s,[p,q]] of Object.entries({k25:['k17','k18'],k26:['k21','k22'],k27:['k19','k20'],k28:['k23','k24']}))bw[s]=ko(bw[p],bw[q]);
+  /* SF (§12.9, M101-M102) */
+  bw.k29=ko(bw.k25,bw.k26);bw.k30=ko(bw.k27,bw.k28);
+  /* Final */
+  const finalists=[bw.k29,bw.k30];
+  const champ=ko(bw.k29,bw.k30);
+  return{tables,adv,finalists,champ};
 }
 let SIM=null;
 function runSims(n){
@@ -1791,12 +1923,27 @@ function rationale(h,a,p){
 /* ---- Projected Bracket rendering (R16 → Final → Champion), the Predictions tab centerpiece ---- */
 function brkRow(team,node){
   if(!team)return`<div class="brkrow tbd"><span class="bf">⏳</span><span class="bn">TBD</span></div>`;
-  const isWin=team===node.winner;
   const prob=team===node.a?node.pa:node.pb;
-  const cls='brkrow'+(node.winner?(isWin?' win':' lose'):'');
-  const flag=(node.played&&isWin)?`<span class="brkflag ${node.correct?'ok':'no'}">${node.correct?'✓':'✗'}</span>`:'';
   const pctTxt=prob!=null?Math.round(prob*100)+'%':'';
-  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><span class="bn">${TEAMS[team].n}</span>${flag}<span class="bp">${pctTxt}</span></div>`;
+  let cls='brkrow',badge='',pct=pctTxt;
+  if(node.played){
+    const isActualWin=team===node.winner;
+    if(node.correct){
+      cls+=isActualWin?' win':' lose';
+      if(isActualWin)badge=`<span class="brkflag ok">✓</span>`;
+    }else{
+      if(isActualWin){cls+=' upset';badge=`<span class="brkflag no">✗</span>`;}
+      else{cls+=' mispred';badge=`<span class="brkflag pred">PREDICTED</span>`;}
+    }
+  }else if(team===node.a?node.aConfirmed:node.bConfirmed){
+    /* This team's group is fully done — their R32 spot is locked in */
+    cls+=team===node.winner?' win':' lose';
+    badge=`<span class="brkflag conf">CONFIRMED</span>`;
+    pct='';
+  }else{
+    cls+=team===node.winner?' win':' lose';
+  }
+  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><span class="bn">${TEAMS[team].n}</span>${badge}<span class="bp">${pct}</span></div>`;
 }
 function brkNode(node){
   return`<div class="brknode${node.played?' played':''}">${brkRow(node.a,node)}${brkRow(node.b,node)}</div>`;
@@ -1835,22 +1982,21 @@ function renderBracket(){
 function renderPredictions(){
   if(!SIM)return;
   const n=SIM.n;
-  const rank=Object.keys(TEAMS).sort((x,y)=>SIM.title[y]-SIM.title[x]);
-  const top=rank[0];
   let html=renderBracket();
-  html+=`${predUpdatedAt?`<div class="pct" style="margin:-10px 0 18px;font-size:11px;color:var(--muted);font-family:var(--mono)">Predictions updated ${predUpdatedAt.toLocaleTimeString()} · ${n.toLocaleString()} simulations</div>`:''}
-  <div class="secl">Title odds — top 12</div><div class="odds">`;
-  const mx=SIM.title[top]/n;
-  rank.slice(0,12).forEach((c,i)=>{
-    const v=SIM.title[c]/n;
-    html+=`<div class="orow"><span class="rk">${String(i+1).padStart(2,'0')}</span><span>${teamFlag(c)}</span>
-    <div class="obarw"><div class="obar" style="width:${Math.max(2,100*v/mx)}%"></div><span class="onm" style="color:${v/mx>.25?'#04130C':'var(--chalk)'}">${TEAMS[c].n}</span></div>
-    <span class="opc">${pct(SIM.title[c],n)}</span></div>`;
-  });
-  /* per-match prediction cards removed — match-wise AI takes now live in the
-     Live & Upcoming tab (Serper-enriched deep takes on each match card).
-     Group-by-group advancement odds removed — now lives in Schedules & Scores > Groups. */
-  html+='</div>';
+  html+=`${predUpdatedAt?`<div class="pct" style="margin:-10px 0 14px;font-size:11px;color:var(--muted);font-family:var(--mono)">Predictions updated ${predUpdatedAt.toLocaleTimeString()} · ${n.toLocaleString()} simulations</div>`:''}
+  <div class="brk-legend">
+    <div class="bl-hd">How to read the bracket</div>
+    <div class="brk-legend-grid">
+      <div class="bl-item"><span class="bl-lbl brkflag ok">✓</span><span><b>Prediction correct</b> — our model called the winner before kick-off</span></div>
+      <div class="bl-item"><span class="bl-lbl brkflag no">✗</span><span><b>Upset</b> — result defied the model; highlighted in gold. The dimmed "PREDICTED" row shows our original pick</span></div>
+      <div class="bl-item"><span class="bl-lbl" style="display:inline-block;width:10px;height:10px;background:var(--green);border-radius:2px;margin-top:3px"></span><span><b>Green bold + %</b> — projected to advance from this match</span></div>
+      <div class="bl-item"><span class="bl-lbl" style="display:inline-block;width:10px;height:10px;background:var(--muted);border-radius:2px;opacity:.4;margin-top:3px"></span><span><b>Dimmed + %</b> — projected to be eliminated in this match</span></div>
+      <div class="bl-item"><span class="bl-lbl brkflag conf" style="margin-top:1px">CONFIRMED</span><span>Group stage complete — R32 spot locked in. Win % shown only once the match is played</span></div>
+      <div class="bl-item"><span class="bl-lbl brkflag pred" style="margin-top:1px">PREDICTED</span><span>Was the model's pre-match pick but lost — original prediction preserved</span></div>
+      <div class="bl-item"><span class="bl-lbl" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px">%</span><span><b>Win probability</b> — 60% Dixon-Coles stat model + 40% LLM blend, 10,000 simulations</span></div>
+      <div class="bl-item"><span class="bl-lbl" style="font-size:13px;margin-top:1px">↻</span><span>Updates on every <b>Pull Fresh Standings</b> — confirmed results lock in, projections sharpen</span></div>
+    </div>
+  </div>`;
   /* AI analysis — cached against predFingerprint(); regenerated only when a match ends.
      New shape {takes:{anthropic,openai}} renders as a Claude/GPT toggle; legacy {text} still works. */
   const pa=state.predAnalysis,fresh=pa&&pa.fingerprint===predFingerprint();

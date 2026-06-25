@@ -246,7 +246,7 @@ LEADERBOARD_CACHE_FILE = "leaderboard_cache.json"
 # cache would otherwise serve incorrect totals forever, since processed matches are
 # never revisited. A version bump wipes the processed/tally state so everything gets
 # recomputed cleanly from the (now-correct) source data on the next standings pull.
-LEADERBOARD_SCHEMA_VERSION = 2  # v2: fixed own-goal credit direction (was inverted)
+LEADERBOARD_SCHEMA_VERSION = 3  # v3: fixed Emam Ashour MOTM team (QAT→EGY, match 760420)
 _LEADERBOARD_DEFAULTS = {
     "schemaVersion": LEADERBOARD_SCHEMA_VERSION,
     "processedGoalsMatchIds": [],   # espnId list — goals already folded into teamGoals/scorerTally
