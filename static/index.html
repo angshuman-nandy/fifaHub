@@ -685,14 +685,13 @@ const KO=[
 ['k31','F','Jul 18','5:00 PM','HRD'],['k32','F','Jul 19','3:00 PM','MET']];
 const KO_LABEL={k31:'Bronze Final',k32:'THE FINAL'};
 const STAGE_NAME={GS:'Group Stage',R32:'Round of 32',R16:'Round of 16',QF:'Quarterfinal',SF:'Semifinal',F:'Final'};
-/* Official WC26 bracket adjacency (verified against FIFA's published knockout tree,
-   matched to our KO slot ids by date+venue): which two R32 slots feed each R16 slot,
-   which two R16 slots feed each QF slot, which two QF slots feed each SF slot, and
-   which two SF slots feed the Final. */
+/* Official WC26 bracket adjacency per FIFA §12.7 table (R16 feeders verified against
+   the published draw: M89=W74+W77, M90=W73+W75, M91=W76+W78, M92=W79+W80,
+   M93=W83+W84, M94=W81+W82, M95=W86+W88, M96=W85+W87). */
 const BRACKET={
-  k17:['k01','k04'], k18:['k03','k06'], k19:['k02','k05'], k20:['k07','k08'],
-  k21:['k12','k11'], k22:['k10','k09'], k23:['k15','k14'], k24:['k13','k16'],
-  k25:['k17','k18'], k26:['k21','k22'], k27:['k19','k20'], k28:['k23','k24'],
+  k17:['k02','k05'], k18:['k01','k03'], k19:['k04','k06'], k20:['k07','k08'],
+  k21:['k11','k12'], k22:['k09','k10'], k23:['k14','k16'], k24:['k13','k15'],
+  k25:['k18','k17'], k26:['k21','k22'], k27:['k19','k20'], k28:['k24','k23'],
   k29:['k25','k26'], k30:['k27','k28'],
   k32:['k29','k30']
 };
@@ -1609,11 +1608,11 @@ const R32_LABELS={
 /* Group stage = m01–m72; KO slots k01–k32 = match #73–#104 */
 const slotNum=slot=>72+parseInt(slot.replace('k',''));
 
-/* Display order derived from the official bracket tree so each node sits
-   vertically centred between its two feeders in the previous column:
-   k29←(k25←k17,k18 / k26←k21,k22)  k30←(k27←k19,k20 / k28←k23,k24) */
-const R32_SLOTS=['k01','k04','k03','k06','k12','k11','k10','k09','k02','k05','k07','k08','k15','k14','k13','k16'];
-const R16_SLOTS=['k17','k18','k21','k22','k19','k20','k23','k24'];
+/* Display order so each node centres vertically between its two feeders:
+   k29←(k25←k18[k01,k03],k17[k02,k05] / k26←k21[k11,k12],k22[k09,k10])
+   k30←(k27←k19[k04,k06],k20[k07,k08] / k28←k24[k13,k15],k23[k14,k16]) */
+const R32_SLOTS=['k01','k03','k02','k05','k11','k12','k09','k10','k04','k06','k07','k08','k13','k15','k14','k16'];
+const R16_SLOTS=['k18','k17','k21','k22','k19','k20','k24','k23'];
 const QF_SLOTS=['k25','k26','k27','k28'];
 const SF_SLOTS=['k29','k30'];
 const F_SLOT='k32';
