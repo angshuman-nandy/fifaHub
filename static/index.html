@@ -291,7 +291,9 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkrow{display:flex;align-items:center;gap:6px;padding:7px 9px}
 .brkrow+.brkrow{border-top:1px solid var(--line)}
 .brkrow .bf{font-size:15px;flex-shrink:0}
-.brkrow .bn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.brkrow .bnw{flex:1;min-width:0;display:flex;flex-direction:column}
+.brkrow .bn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.brkrow .bpos{font-family:var(--mono);font-size:9px;font-weight:400;color:var(--muted);opacity:.65;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brkrow .bp{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
 .brkrow.win{background:rgba(0,194,119,.12);border-left:3px solid var(--green)}
 .brkrow.win .bn{font-weight:700;color:var(--chalk)}
@@ -302,7 +304,6 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkflag.ok{color:var(--green)}
 .brkflag.no{color:var(--red)}
 .brkflag.pred{font-size:9px;font-weight:600;color:var(--gold);border:1px solid rgba(239,201,76,.4);padding:1px 5px;border-radius:3px;line-height:1.4}
-.brkflag.conf{font-size:9px;font-weight:600;color:var(--green);border:1px solid rgba(0,194,119,.35);padding:1px 5px;border-radius:3px;line-height:1.4}
 .fixflag{font-family:var(--mono);font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;line-height:1.4;margin-left:5px;vertical-align:middle}
 .fixflag.conf{color:var(--green);border:1px solid rgba(0,194,119,.35)}
 .fixflag.proj{color:var(--muted);border:1px solid var(--line)}
@@ -311,6 +312,8 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkrow.upset .bn{font-weight:700;color:var(--chalk)}
 .brkrow.upset .bp{color:var(--gold)}
 .brkrow.mispred{opacity:.45}
+.brkrow.unconf{opacity:0.42}
+.brkmatch{font-family:var(--mono);font-size:9px;color:var(--muted);text-align:right;padding:3px 9px 2px;border-bottom:1px solid var(--line);letter-spacing:.04em}
 .brk-legend{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:4px 0 20px}
 .brk-legend .bl-hd{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
 .brk-legend-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 18px}
@@ -1592,6 +1595,19 @@ function teamDone(code){
   return ms.length>0&&ms.every(m=>(state.results[m[0]]||{}).status==='FT');
 }
 const BEST3RD_SLOTS=new Set(['k01','k04','k07','k08','k09','k10','k13','k16']);
+/* Position labels for each R32 slot [teamA, teamB] — mirrors projectR32Teams() mapping */
+const R32_LABELS={
+  k01:['Winner E','Best 3rd ABCDF'],  k02:['Winner C','Runner-up F'],
+  k03:['Runner-up A','Runner-up B'],   k04:['Winner I','Best 3rd CDFGH'],
+  k05:['Runner-up E','Runner-up I'],   k06:['Winner F','Runner-up C'],
+  k07:['Winner A','Best 3rd CEFHI'],  k08:['Winner L','Best 3rd EHIJK'],
+  k09:['Winner G','Best 3rd AEHIJ'],  k10:['Winner D','Best 3rd BEFIJ'],
+  k11:['Winner H','Runner-up J'],      k12:['Runner-up K','Runner-up L'],
+  k13:['Winner B','Best 3rd EFGIJ'],  k14:['Runner-up D','Runner-up G'],
+  k15:['Winner J','Runner-up H'],      k16:['Winner K','Best 3rd DEIJL']
+};
+/* Group stage = m01–m72; KO slots k01–k32 = match #73–#104 */
+const slotNum=slot=>72+parseInt(slot.replace('k',''));
 
 /* Display order derived from the official bracket tree so each node sits
    vertically centred between its two feeders in the previous column:
@@ -1619,6 +1635,7 @@ function projectBracket(){
     n.aConfirmed=!!kt||(!!h&&teamDone(h));
     n.bConfirmed=!!kt||(!!a&&(BEST3RD_SLOTS.has(slot)?groupsDone(BEST3RD_ELIG_GROUPS[slot]):teamDone(a)));
     n.confirmed=n.aConfirmed&&n.bConfirmed;
+    n.aLabel=R32_LABELS[slot][0];n.bLabel=R32_LABELS[slot][1];
     bySlot[slot]=n;return n;
   });
   const R16=R16_SLOTS.map(slot=>{
@@ -1626,20 +1643,25 @@ function projectBracket(){
     let n;
     if(kt){n=resolveNode(slot,'R16',kt.h,kt.a)}
     else{const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);n=resolveNode(slot,'R16',winnerOf(f0),winnerOf(f1))}
+    const[lf0,lf1]=BRACKET[slot].map(s=>bySlot[s]);
+    n.aLabel=`Winner #${slotNum(lf0.slot)}`;n.bLabel=`Winner #${slotNum(lf1.slot)}`;
     bySlot[slot]=n;return n;
   });
   const QF=QF_SLOTS.map(slot=>{
     const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);
     const n=resolveNode(slot,'QF',winnerOf(f0),winnerOf(f1));
+    n.aLabel=`Winner #${slotNum(f0.slot)}`;n.bLabel=`Winner #${slotNum(f1.slot)}`;
     bySlot[slot]=n;return n;
   });
   const SF=SF_SLOTS.map(slot=>{
     const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);
     const n=resolveNode(slot,'SF',winnerOf(f0),winnerOf(f1));
+    n.aLabel=`Winner #${slotNum(f0.slot)}`;n.bLabel=`Winner #${slotNum(f1.slot)}`;
     bySlot[slot]=n;return n;
   });
   const[f0,f1]=BRACKET[F_SLOT].map(s=>bySlot[s]);
   const F=[resolveNode(F_SLOT,'F',winnerOf(f0),winnerOf(f1))];
+  F[0].aLabel=`Winner #${slotNum(f0.slot)}`;F[0].bLabel=`Winner #${slotNum(f1.slot)}`;
   return{rounds:{R32,R16,QF,SF,F},champ:F[0].winner};
 }
 /* refreshBracketPreds: the ONLY place genKoPred is enqueued. Called from pullFresh after
@@ -1941,8 +1963,8 @@ function rationale(h,a,p){
   return `<b>${dH.n}</b> (FIFA #${dH.rk}): ${dH.note}. <b>${dA.n}</b> (FIFA #${dA.rk}): ${dA.note}. The model sees ${edge}.`;
 }
 /* ---- Projected Bracket rendering (R16 → Final → Champion), the Predictions tab centerpiece ---- */
-function brkRow(team,node){
-  if(!team)return`<div class="brkrow tbd"><span class="bf">⏳</span><span class="bn">TBD</span></div>`;
+function brkRow(team,label,node){
+  if(!team)return`<div class="brkrow tbd"><span class="bf">⏳</span><div class="bnw"><span class="bn">${label||'TBD'}</span></div></div>`;
   const prob=team===node.a?node.pa:node.pb;
   const pctTxt=prob!=null?Math.round(prob*100)+'%':'';
   let cls='brkrow',badge='',pct=pctTxt;
@@ -1955,18 +1977,18 @@ function brkRow(team,node){
       if(isActualWin){cls+=' upset';badge=`<span class="brkflag no">✗</span>`;}
       else{cls+=' mispred';badge=`<span class="brkflag pred">PREDICTED</span>`;}
     }
-  }else if(team===node.a?node.aConfirmed:node.bConfirmed){
-    /* This team's group is fully done — their R32 spot is locked in */
-    cls+=team===node.winner?' win':' lose';
-    badge=`<span class="brkflag conf">CONFIRMED</span>`;
-    pct='';
   }else{
-    cls+=team===node.winner?' win':' lose';
+    const isConf=team===node.a?node.aConfirmed:node.bConfirmed;
+    if(!isConf){cls+=' unconf';}              // not yet confirmed: disabled/dimmed
+    else if(team===node.winner){cls+=' win';} // confirmed projected winner: green
+    // confirmed projected loser: plain full-opacity (no badge, no dim)
   }
-  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><span class="bn">${TEAMS[team].n}</span>${badge}<span class="bp">${pct}</span></div>`;
+  const posHTML=label?`<span class="bpos">${label}</span>`:'';
+  return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><div class="bnw"><span class="bn">${TEAMS[team].n}</span>${posHTML}</div>${badge}<span class="bp">${pct}</span></div>`;
 }
 function brkNode(node){
-  return`<div class="brknode${node.played?' played':''}">${brkRow(node.a,node)}${brkRow(node.b,node)}</div>`;
+  const num=`<div class="brkmatch">#${slotNum(node.slot)}</div>`;
+  return`<div class="brknode${node.played?' played':''}">${num}${brkRow(node.a,node.aLabel,node)}${brkRow(node.b,node.bLabel,node)}</div>`;
 }
 function renderBracket(){
   if(!SIM)return'';
