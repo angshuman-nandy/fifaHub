@@ -1901,8 +1901,29 @@ function assignThirdPlaceSlots(qualGroups){
   return s2g;
 }
 
+/* Project full group standings: real FT results + Elo-expected winner (1-0) for unplayed.
+   Used as fallback for Best3rd slots whose eligible groups haven't produced top-8 qualifiers. */
+function projectTable(group){
+  const gms=GS.filter(m=>m[3]===group);
+  const rows={};
+  gms.forEach(m=>[m[4],m[5]].forEach(c=>{if(!rows[c])rows[c]={c,pts:0,gf:0,ga:0}}));
+  gms.forEach(m=>{
+    const r=state.results[m[0]];
+    let hs,as;
+    if(r&&r.status==='FT'){hs=r.hs;as=r.as}
+    else{hs=TEAMS[m[4]].elo>=TEAMS[m[5]].elo?1:0;as=1-hs}
+    rows[m[4]].gf+=hs;rows[m[4]].ga+=as;rows[m[5]].gf+=as;rows[m[5]].ga+=hs;
+    if(hs>as)rows[m[4]].pts+=3;else if(hs<as)rows[m[5]].pts+=3;
+    else{rows[m[4]].pts++;rows[m[5]].pts++}
+  });
+  return Object.values(rows).sort((x,y)=>
+    y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||TEAMS[x.c].rk-TEAMS[y.c].rk
+  );
+}
+
 /* Derive the projected R32 pairings from current live group standings.
-   Uses computeTable() (real results) + Elo tiebreak for not-yet-played matches.
+   Uses computeTable() (real results) for confirmed groups; for Best3rd slots that
+   can't be filled from real top-8 qualifiers, falls back to projectTable() (Elo projection).
    Called by projectBracket() for any R32 slot not yet populated from ESPN. */
 function projectR32Teams(){
   const W={},R={},thirds=[];
@@ -1921,6 +1942,22 @@ function projectR32Teams(){
   for(const[slot,grp] of Object.entries(s2g)){
     const entry=best8.find(x=>x.g===grp);
     if(entry)T3[slot]=entry.c;
+  }
+  /* For slots still empty (no real top-8 team from eligible groups), project via Elo */
+  const ELIG_MAP={k01:'ABCDF',k04:'CDFGH',k07:'CEFHI',k08:'EHIJK',k09:'AEHIJ',k10:'BEFIJ',k13:'EFGIJ',k16:'DEIJL'};
+  const usedGroups=new Set(Object.values(s2g));
+  for(const[slot,eligStr]of Object.entries(ELIG_MAP)){
+    if(T3[slot])continue;
+    const cands=[];
+    for(const g of eligStr){
+      if(usedGroups.has(g))continue;
+      const tbl=projectTable(g);
+      if(tbl[2])cands.push({...tbl[2],g});
+    }
+    if(!cands.length)continue;
+    cands.sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||TEAMS[x.c].rk-TEAMS[y.c].rk);
+    T3[slot]=cands[0].c;
+    usedGroups.add(cands[0].g);
   }
   return{
     k01:[W.E,T3.k01||null],  k02:[W.C,R.F],           k03:[R.A,R.B],           k04:[W.I,T3.k04||null],
