@@ -2091,6 +2091,15 @@ async function downloadBracketPDF(){
     /* Clone off-screen at full scroll width so html2canvas captures every column */
     const clone=scroll.cloneNode(true);
     clone.style.cssText=`position:absolute;left:-9999px;top:0;overflow:visible;width:${scroll.scrollWidth}px;background:#0d1117;padding:16px;box-sizing:border-box`;
+    /* Append credits footer to the captured area */
+    const foot=document.createElement('div');
+    foot.style.cssText='display:flex;align-items:center;justify-content:center;gap:8px;padding:20px 16px 8px;border-top:1px solid rgba(255,255,255,0.08);margin-top:20px;font-family:monospace;font-size:13px;color:#6b7280;letter-spacing:.05em';
+    foot.innerHTML=`<span>built with <span style="color:#e57ca0">♥</span> from</span>`
+      +`<svg width="22" height="27" viewBox="0 0 8 10" style="shape-rendering:crispEdges;vertical-align:middle" aria-hidden="true"><rect x="2" y="0" width="4" height="2" fill="#2A1E14"/><rect x="2" y="2" width="4" height="2" fill="#E8B07A"/><rect x="3" y="2" width="1" height="1" fill="#1B1B1B"/><rect x="5" y="2" width="1" height="1" fill="#1B1B1B"/><rect x="1" y="4" width="6" height="3" fill="#1E9C5A"/><rect x="3" y="5" width="2" height="1" fill="#F2C14E"/><rect x="0" y="4" width="1" height="2" fill="#E8B07A"/><rect x="7" y="4" width="1" height="2" fill="#E8B07A"/><rect x="2" y="7" width="4" height="1" fill="#EFF6EF"/><rect x="2" y="8" width="1" height="1" fill="#E8B07A"/><rect x="5" y="8" width="1" height="1" fill="#E8B07A"/><rect x="2" y="9" width="1" height="1" fill="#1B1B1B"/><rect x="5" y="9" width="1" height="1" fill="#1B1B1B"/></svg>`
+      +`<span>Angshuman ⌥ gh and</span>`
+      +`<svg width="20" height="20" viewBox="-12 -12 24 24" style="vertical-align:middle" aria-hidden="true"><g stroke="#D97757" stroke-width="2.4" stroke-linecap="round"><line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(0)"/><line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(30)"/><line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(60)"/><line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(90)"/><line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(120)"/><line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(150)"/><line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(180)"/><line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(210)"/><line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(240)"/><line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(270)"/><line x1="0" y1="-3.2" x2="0" y2="-10" transform="rotate(300)"/><line x1="0" y1="-3.2" x2="0" y2="-7.5" transform="rotate(330)"/></g></svg>`
+      +`<span>Claude Code</span>`;
+    clone.appendChild(foot);
     document.body.appendChild(clone);
     let canvas;
     try{
