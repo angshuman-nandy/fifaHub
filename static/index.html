@@ -1883,22 +1883,22 @@ function samplePois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(
    Eligible groups per slot come directly from the published draw rules. Uses augmenting-path
    DFS — for any valid 8-of-12 combination the matching is always complete. */
 function assignThirdPlaceSlots(qualGroups){
+  /* qualGroups is sorted best-first (by the same Pts→GD→GF→FIFA-rank order used for
+     the overall 3rd-place ranking). Greedy first-fit: for each slot take the highest-
+     ranked qualifying group still available. This ensures e.g. the best 3rd from ABCDF
+     goes to k01 rather than being pulled away by augmenting-path optimisation. */
   const eligible={
     k01:'ABCDF', k04:'CDFGH', k07:'CEFHI', k08:'EHIJK',
     k09:'AEHIJ', k10:'BEFIJ', k13:'EFGIJ', k16:'DEIJL'
   };
-  const slots=Object.keys(eligible);
-  const s2g={},g2s={};
-  function dfs(slot,seen){
+  const s2g={};
+  const used=new Set();
+  for(const[slot,eligStr]of Object.entries(eligible)){
     for(const g of qualGroups){
-      if(!eligible[slot].includes(g)||seen.has(g))continue;
-      seen.add(g);
-      if(g2s[g]==null||dfs(g2s[g],seen)){s2g[slot]=g;g2s[g]=slot;return true;}
+      if(eligStr.includes(g)&&!used.has(g)){s2g[slot]=g;used.add(g);break;}
     }
-    return false;
   }
-  for(const slot of slots)dfs(slot,new Set());
-  return s2g; // {k01:'A', k04:'C', ...}
+  return s2g;
 }
 
 /* Derive the projected R32 pairings from current live group standings.
