@@ -303,6 +303,10 @@ td.pts{font-weight:700;color:var(--chalk)}
 .brkflag.no{color:var(--red)}
 .brkflag.pred{font-size:9px;font-weight:600;color:var(--gold);border:1px solid rgba(239,201,76,.4);padding:1px 5px;border-radius:3px;line-height:1.4}
 .brkflag.conf{font-size:9px;font-weight:600;color:var(--green);border:1px solid rgba(0,194,119,.35);padding:1px 5px;border-radius:3px;line-height:1.4}
+.fixflag{font-family:var(--mono);font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;line-height:1.4;margin-left:5px;vertical-align:middle}
+.fixflag.conf{color:var(--green);border:1px solid rgba(0,194,119,.35)}
+.fixflag.proj{color:var(--muted);border:1px solid var(--line)}
+.row.proj .tn,.row.proj .fl{opacity:.55}
 .brkrow.upset{background:rgba(239,201,76,.09);border-left:3px solid var(--gold)}
 .brkrow.upset .bn{font-weight:700;color:var(--chalk)}
 .brkrow.upset .bp{color:var(--gold)}
@@ -755,7 +759,21 @@ function findKoSlotByDate(stage,realDateStr){
 }
 function allMatches(){
   const g=GS.map(m=>{const i=fmtIST(m[1],m[2]);return{id:m[0],stage:'GS',d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[1],g:m[3],h:m[4],a:m[5],v:VEN[m[6]]}});
-  const k=KO.map(m=>{const kt=state.koTeams[m[0]]||{};const i=fmtIST(m[2],m[3]);return{id:m[0],stage:m[1],d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[2],g:null,h:kt.h||null,a:kt.a||null,v:VEN[m[4]],label:KO_LABEL[m[0]]||STAGE_NAME[m[1]]}});
+  /* build projected bracket once so KO fixtures show confirmed/projected teams */
+  const bkt=projectBracket();
+  const bySlot={};
+  for(const nodes of Object.values(bkt.rounds))for(const n of nodes)bySlot[n.slot]=n;
+  const k=KO.map(m=>{
+    const slot=m[0];const kt=state.koTeams[slot]||{};const node=bySlot[slot];const i=fmtIST(m[2],m[3]);
+    const h=kt.h||(node?node.a:null);
+    const a=kt.a||(node?node.b:null);
+    const hConf=!!kt.h||(node?!!node.aConfirmed:false);
+    const aConf=!!kt.a||(node?!!node.bConfirmed:false);
+    const hProj=!kt.h&&!!h&&!hConf;
+    const aProj=!kt.a&&!!a&&!aConf;
+    return{id:slot,stage:m[1],d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[2],g:null,
+           h,a,hConf,aConf,hProj,aProj,v:VEN[m[4]],label:KO_LABEL[slot]||STAGE_NAME[m[1]]};
+  });
   return g.concat(k);
 }
 const teamName=c=>TEAMS[c]?TEAMS[c].n:(c||'TBD');
@@ -771,7 +789,7 @@ function bugHTML(m,opts){
   const hw=r&&st==='FT'&&hs>as, aw=r&&st==='FT'&&as>hs;
   const tag=m.stage==='GS'?`GROUP <span class="grp">${m.g}</span>`:`<span class="grp">${esc(m.label||STAGE_NAME[m.stage])}</span>`;
   let nav='';
-  if(m.h&&m.a){
+  if(m.h&&m.a&&!m.hProj&&!m.aProj){
     /* Squad & Formations works for upcoming/live/finished alike (lineups-only, no LLM) */
     const links=[`<button data-nav="squad" data-mid="${m.id}">Squad &amp; Formations</button>`];
     /* "Pred →" button removed — predictions merged into the Live & Upcoming full card */
@@ -804,10 +822,14 @@ function bugHTML(m,opts){
     <div class="ctabpane on" data-ctabpane="pred-${m.id}">${predPane}</div>
     <div class="ctabpane" data-ctabpane="facts-${m.id}"><div id="mfacts-${m.id}">${factsHTML(m.id)}</div></div>`;
   }
+  const _tr=(team,conf,proj,score,win)=>{
+    const badge=conf?`<span class="fixflag conf">CONFIRMED</span>`:proj?`<span class="fixflag proj">PROJ</span>`:'';
+    return`<div class="row${win?' w':''}${proj&&!conf?' proj':''}"><span class="fl">${team?teamFlag(team):'⏳'}</span><span class="tn">${team?TEAMS[team].n:'To be decided'}${badge}<small>${team||''}</small></span><span class="sc">${score??'–'}</span></div>`;
+  };
   return `<div class="bug ${st==='FT'?'ft':''} ${st==='LIVE'?'live':''}"${predAttr}>
     <div class="meta"><span>${tag}</span><span>${esc(m.d)} · ${esc(m.t)} IST</span><span class="st-${st}">${st==='LIVE'?'● LIVE':st}</span></div>
-    <div class="row ${hw?'w':''}"><span class="fl">${teamFlag(m.h)}</span><span class="tn">${m.h?TEAMS[m.h].n:'To be decided'}<small>${m.h||''}</small></span><span class="sc">${hs??'–'}</span></div>
-    <div class="row ${aw?'w':''}"><span class="fl">${teamFlag(m.a)}</span><span class="tn">${m.a?TEAMS[m.a].n:'To be decided'}<small>${m.a||''}</small></span><span class="sc">${as??'–'}</span></div>
+    ${_tr(m.h,m.hConf,m.hProj,hs,hw)}
+    ${_tr(m.a,m.aConf,m.aProj,as,aw)}
     ${r&&r.scorers&&r.scorers.length?`<div class="scorers">${r.scorers.map(esc).join(' · ')}</div>`:''}
     <div class="venue">📍 ${m.v}</div>
     ${fullBlock}
@@ -1552,14 +1574,12 @@ function resolveNode(slot,stage,a,b){
   }
   return{slot,stage,a,b,winner:tp.winner,played:false,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:null,llm:tp.llm};
 }
-/* Groups whose results must all be FT before each R32 slot is confirmed.
-   Non-Best3rd slots need only their two source groups; Best3rd slots need all
-   12 because the 8-team ranking can't be settled until every group is done. */
-const SLOT_REQ_GROUPS={
-  k01:'ABCDEFGHIJKL', k02:'CF',           k03:'AB',           k04:'ABCDEFGHIJKL',
-  k05:'EI',           k06:'CF',           k07:'ABCDEFGHIJKL', k08:'ABCDEFGHIJKL',
-  k09:'ABCDEFGHIJKL', k10:'ABCDEFGHIJKL', k11:'HJ',           k12:'KL',
-  k13:'ABCDEFGHIJKL', k14:'DG',           k15:'HJ',           k16:'ABCDEFGHIJKL'
+/* Per FIFA WC26 §12.6, each Best3rd slot is eligible for teams from exactly 5 groups.
+   A Best3rd team is confirmed for its slot once those 5 groups are all FT — teams
+   from the remaining groups cannot fill that slot regardless of their ranking. */
+const BEST3RD_ELIG_GROUPS={
+  k01:'ABCDF', k04:'CDFGH', k07:'CEFHI', k08:'EHIJK',
+  k09:'AEHIJ', k10:'BEFIJ', k13:'EFGIJ', k16:'DEIJL'
 };
 function groupsDone(gs){
   return[...gs].every(g=>GS.filter(m=>m[3]===g).every(m=>(state.results[m[0]]||{}).status==='FT'));
@@ -1597,7 +1617,7 @@ function projectBracket(){
     /* per-team confirmed: each team shows CONFIRMED once their own group is fully FT.
        Best3rd opponents still need all 12 groups done (ranking can't settle earlier). */
     n.aConfirmed=!!kt||(!!h&&teamDone(h));
-    n.bConfirmed=!!kt||(!!a&&(BEST3RD_SLOTS.has(slot)?groupsDone('ABCDEFGHIJKL'):teamDone(a)));
+    n.bConfirmed=!!kt||(!!a&&(BEST3RD_SLOTS.has(slot)?groupsDone(BEST3RD_ELIG_GROUPS[slot]):teamDone(a)));
     n.confirmed=n.aConfirmed&&n.bConfirmed;
     bySlot[slot]=n;return n;
   });
