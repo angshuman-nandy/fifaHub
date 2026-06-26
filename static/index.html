@@ -2077,6 +2077,53 @@ function brkNode(node){
   const num=`<div class="brkmatch">#${slotNum(node.slot)}</div>`;
   return`<div class="brknode${node.played?' played':''}">${num}${brkRow(node.a,node.aLabel,node)}${brkRow(node.b,node.bLabel,node)}</div>`;
 }
+function _loadScript(src){
+  if(document.querySelector(`script[src="${src}"]`))return Promise.resolve();
+  return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+}
+async function downloadBracketPDF(){
+  const btn=document.getElementById('brkPdfBtn');
+  if(btn){btn.disabled=true;btn.textContent='Generating…';}
+  try{
+    await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const scroll=document.getElementById('brkScrollArea');
+    /* Clone off-screen at full scroll width so html2canvas captures every column */
+    const clone=scroll.cloneNode(true);
+    clone.style.cssText=`position:absolute;left:-9999px;top:0;overflow:visible;width:${scroll.scrollWidth}px;background:#0d1117;padding:16px;box-sizing:border-box`;
+    document.body.appendChild(clone);
+    let canvas;
+    try{
+      canvas=await html2canvas(clone,{
+        scale:2,backgroundColor:'#0d1117',useCORS:true,allowTaint:true,logging:false,
+        width:clone.scrollWidth,height:clone.scrollHeight,windowWidth:clone.scrollWidth
+      });
+    }finally{document.body.removeChild(clone);}
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a3'});
+    const pw=pdf.internal.pageSize.getWidth();
+    const ph=pdf.internal.pageSize.getHeight();
+    const imgData=canvas.toDataURL('image/jpeg',0.92);
+    const ratio=canvas.height/canvas.width;
+    const imgH=pw*ratio;
+    const margin=8;
+    if(imgH<=ph-margin*2){
+      pdf.addImage(imgData,'JPEG',margin,margin,pw-margin*2,(pw-margin*2)*ratio);
+    }else{
+      /* tall bracket: tile across pages */
+      const drawW=pw-margin*2;
+      const drawH=drawW*ratio;
+      const pages=Math.ceil((drawH+margin)/(ph-margin));
+      for(let p=0;p<pages;p++){
+        if(p>0)pdf.addPage();
+        pdf.addImage(imgData,'JPEG',margin,margin-p*(ph-margin),drawW,drawH);
+      }
+    }
+    const ts=new Date().toISOString().slice(0,10);
+    pdf.save(`wc2026-bracket-${ts}.pdf`);
+  }catch(err){alert('PDF generation failed: '+err.message);}
+  finally{if(btn){btn.disabled=false;btn.textContent='⬇ Download PDF';}}
+}
 function renderBracket(){
   if(!SIM)return'';
   const{rounds,champ}=projectBracket();
@@ -2087,9 +2134,12 @@ function renderBracket(){
   const champHTML=champ
     ?`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">${teamFlag(champ)}</div><div class="cname">${TEAMS[champ].n}</div><div class="cpct">title in ${pct(SIM.title[champ],SIM.n)} of all sims</div></div>`
     :`<div class="brkchamp"><div class="trophy">🏆</div><div class="cflag">⏳</div><div class="cname">TBD</div><div class="cnote">awaiting the Round of 32</div></div>`;
-  return`<div class="secl">Projected bracket — the chalk path</div>
+  return`<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+    <div class="secl" style="margin-bottom:0">Projected bracket — the chalk path</div>
+    <button id="brkPdfBtn" class="btn" style="font-size:11px;padding:4px 12px" onclick="downloadBracketPDF()">⬇ Download PDF</button>
+  </div>
   <div class="brkhint">SWIPE TO FOLLOW THE PATH →</div>
-  <div class="brkscroll">
+  <div class="brkscroll" id="brkScrollArea">
     <div class="brkheaders">
       <div class="brkch">ROUND OF 32</div>
       <div class="brkch">ROUND OF 16</div>
