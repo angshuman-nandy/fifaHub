@@ -1978,9 +1978,7 @@ function brkRow(team,label,node){
     }
   }else{
     const isConf=team===node.a?node.aConfirmed:node.bConfirmed;
-    if(!isConf){cls+=' unconf';}              // not yet confirmed: disabled/dimmed
-    else if(team===node.winner){cls+=' win';} // confirmed projected winner: green
-    // confirmed projected loser: plain full-opacity (no badge, no dim)
+    if(!isConf)cls+=' unconf'; // not confirmed: disabled/dimmed
   }
   const posHTML=label?`<span class="bpos">${label}</span>`:'';
   return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><div class="bnw"><span class="bn">${TEAMS[team].n}</span>${posHTML}</div>${badge}<span class="bp">${pct}</span></div>`;
