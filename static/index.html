@@ -916,14 +916,66 @@ function updateRail(){
 /* standings computed from FT results */
 function computeTable(group){
   const rows={};
-  GS.filter(m=>m[3]===group).forEach(m=>{[m[4],m[5]].forEach(c=>{if(!rows[c])rows[c]={c,p:0,w:0,dr:0,l:0,gf:0,ga:0,pts:0}})});
-  GS.filter(m=>m[3]===group).forEach(m=>{
+  const gms=GS.filter(m=>m[3]===group);
+  gms.forEach(m=>{[m[4],m[5]].forEach(c=>{if(!rows[c])rows[c]={c,p:0,w:0,dr:0,l:0,gf:0,ga:0,pts:0}})});
+  gms.forEach(m=>{
     const r=state.results[m[0]];if(!r||r.status!=='FT')return;
     const H=rows[m[4]],A=rows[m[5]];
     H.p++;A.p++;H.gf+=r.hs;H.ga+=r.as;A.gf+=r.as;A.ga+=r.hs;
     if(r.hs>r.as){H.w++;A.l++;H.pts+=3}else if(r.hs<r.as){A.w++;H.l++;A.pts+=3}else{H.dr++;A.dr++;H.pts++;A.pts++}
   });
-  return Object.values(rows).sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||TEAMS[y.c].elo-TEAMS[x.c].elo);
+  /* FIFA Art.13 tiebreak: H2H pts→GD→GF among tied group, then overall GD→GF→FIFA rank */
+  function h2h(codes){
+    const s={};codes.forEach(c=>s[c]={pts:0,gd:0,gf:0});
+    gms.forEach(m=>{
+      if(!codes.includes(m[4])||!codes.includes(m[5]))return;
+      const r=state.results[m[0]];if(!r||r.status!=='FT')return;
+      s[m[4]].gf+=r.hs;s[m[5]].gf+=r.as;
+      s[m[4]].gd+=r.hs-r.as;s[m[5]].gd+=r.as-r.hs;
+      if(r.hs>r.as)s[m[4]].pts+=3;else if(r.hs<r.as)s[m[5]].pts+=3;else{s[m[4]].pts++;s[m[5]].pts++;}
+    });
+    return s;
+  }
+  function sortCodes(codes){
+    if(codes.length<=1)return codes;
+    const byPts=[...codes].sort((a,b)=>rows[b].pts-rows[a].pts);
+    const out=[];
+    let i=0;
+    while(i<byPts.length){
+      let j=i;
+      while(j<byPts.length&&rows[byPts[j]].pts===rows[byPts[i]].pts)j++;
+      const tied=byPts.slice(i,j);
+      if(tied.length===1){out.push(tied[0]);i=j;continue;}
+      /* apply H2H criteria to the entire tied group */
+      const hs=h2h(tied);
+      const h2hSorted=[...tied].sort((a,b)=>hs[b].pts-hs[a].pts||hs[b].gd-hs[a].gd||hs[b].gf-hs[a].gf);
+      /* group any remaining H2H sub-ties and resolve with overall criteria */
+      let k=0;
+      while(k<h2hSorted.length){
+        let l=k;
+        const ref=h2hSorted[k];
+        while(l<h2hSorted.length){
+          const t=h2hSorted[l];
+          if(hs[t].pts!==hs[ref].pts||hs[t].gd!==hs[ref].gd||hs[t].gf!==hs[ref].gf)break;
+          l++;
+        }
+        const sub=h2hSorted.slice(k,l);
+        if(sub.length===1){out.push(sub[0]);}
+        else{
+          /* still tied after H2H → overall GD, GF, FIFA ranking (skip fair play — handled separately) */
+          out.push(...[...sub].sort((a,b)=>
+            (rows[b].gf-rows[b].ga)-(rows[a].gf-rows[a].ga)||
+            rows[b].gf-rows[a].gf||
+            TEAMS[a].rk-TEAMS[b].rk
+          ));
+        }
+        k=l;
+      }
+      i=j;
+    }
+    return out;
+  }
+  return sortCodes(Object.keys(rows)).map(c=>rows[c]);
 }
 function renderStandings(){
   let html='';
@@ -1860,7 +1912,8 @@ function projectR32Teams(){
     R[g]=tbl[1]?tbl[1].c:null;
     if(tbl[2])thirds.push({...tbl[2],g});
   }
-  thirds.sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||TEAMS[y.c].elo-TEAMS[x.c].elo);
+  /* FIFA §12.5: best 3rd ranked by Pts → GD → GF → fair play (TODO) → FIFA ranking */
+  thirds.sort((x,y)=>y.pts-x.pts||((y.gf-y.ga)-(x.gf-x.ga))||y.gf-x.gf||TEAMS[x.c].rk-TEAMS[y.c].rk);
   const best8=thirds.slice(0,8);
   const qualGroups=best8.map(t=>t.g);
   const s2g=assignThirdPlaceSlots(qualGroups);
