@@ -670,9 +670,9 @@ const GS=[
 ['m71','Jun 27','10:00 PM','J','ALG','AUT','ARW'],['m72','Jun 27','10:00 PM','J','JOR','ARG','ATT']];
 
 const KO=[
-['k01','R32','Jun 28','3:00 PM','SOF'],['k02','R32','Jun 29','1:00 PM','NRG'],['k03','R32','Jun 29','4:30 PM','GIL'],
-['k04','R32','Jun 29','9:00 PM','BBV'],['k05','R32','Jun 30','1:00 PM','ATT'],['k06','R32','Jun 30','5:00 PM','MET'],
-['k07','R32','Jun 30','9:00 PM','AZT'],['k08','R32','Jul 1','12:00 PM','MBZ'],['k09','R32','Jul 1','4:00 PM','LUM'],
+['k01','R32','Jun 29','4:30 PM','GIL'],['k02','R32','Jun 29','1:00 PM','NRG'],['k03','R32','Jun 28','3:00 PM','SOF'],
+['k04','R32','Jun 30','5:00 PM','MET'],['k05','R32','Jun 30','1:00 PM','ATT'],['k06','R32','Jun 29','8:00 PM','BBV'],
+['k07','R32','Jun 30','8:00 PM','AZT'],['k08','R32','Jul 1','12:00 PM','MBZ'],['k09','R32','Jul 1','4:00 PM','LUM'],
 ['k10','R32','Jul 1','8:00 PM','LEV'],['k11','R32','Jul 2','3:00 PM','SOF'],['k12','R32','Jul 2','7:00 PM','BMO'],
 ['k13','R32','Jul 2','11:00 PM','BCP'],['k14','R32','Jul 3','2:00 PM','ATT'],['k15','R32','Jul 3','6:00 PM','HRD'],
 ['k16','R32','Jul 3','9:30 PM','ARW'],
@@ -685,9 +685,9 @@ const KO=[
 ['k31','F','Jul 18','5:00 PM','HRD'],['k32','F','Jul 19','3:00 PM','MET']];
 const KO_LABEL={k31:'Bronze Final',k32:'THE FINAL'};
 const STAGE_NAME={GS:'Group Stage',R32:'Round of 32',R16:'Round of 16',QF:'Quarterfinal',SF:'Semifinal',F:'Final'};
-/* Official WC26 bracket adjacency per FIFA §12.7 table (R16 feeders verified against
-   the published draw: M89=W74+W77, M90=W73+W75, M91=W76+W78, M92=W79+W80,
-   M93=W83+W84, M94=W81+W82, M95=W86+W88, M96=W85+W87). */
+/* Official WC26 bracket adjacency per FIFA §12.7 table.
+   R16 feeders (using official M-numbers): M89=W76+W78, M90=W74+W73, M91=W77+W75,
+   M92=W79+W80, M93=W84+W83, M94=W82+W81, M95=W88+W87, M96=W85+W86. */
 const BRACKET={
   k17:['k02','k05'], k18:['k01','k03'], k19:['k04','k06'], k20:['k07','k08'],
   k21:['k11','k12'], k22:['k09','k10'], k23:['k14','k16'], k24:['k13','k15'],
@@ -1657,8 +1657,15 @@ const R32_LABELS={
   k13:['Winner B','Best 3rd EFGIJ'],  k14:['Runner-up D','Runner-up G'],
   k15:['Winner J','Runner-up H'],      k16:['Winner K','Best 3rd DEIJL']
 };
-/* Group stage = m01–m72; KO slots k01–k32 = match #73–#104 */
-const slotNum=slot=>72+parseInt(slot.replace('k',''));
+/* Official FIFA WC2026 match numbers per KO slot.
+   R32 (#73-#88) verified against published schedule; R16 (#89-#96) tentative. */
+const SLOT_NUM={
+  k01:74,k02:76,k03:73,k04:77,k05:78,k06:75,k07:79,k08:80,
+  k09:82,k10:81,k11:84,k12:83,k13:85,k14:88,k15:86,k16:87,
+  k17:89,k18:90,k19:91,k20:92,k21:93,k22:94,k23:95,k24:96,
+  k25:97,k26:98,k27:99,k28:100,k29:101,k30:102,k32:104
+};
+const slotNum=slot=>SLOT_NUM[slot]||(72+parseInt(slot.replace('k','')));
 
 /* Display order so each node centres vertically between its two feeders:
    k29←(k25←k18[k01,k03],k17[k02,k05] / k26←k21[k11,k12],k22[k09,k10])
@@ -1882,17 +1889,23 @@ function samplePois(l){let L=Math.exp(-l),k=0,p=1;do{k++;p*=Math.random()}while(
    teams), assign each to the correct "Best 3rd" R32 slot per FIFA WC26 §12.6 / Annexe C.
    Eligible groups per slot come directly from the published draw rules. Uses augmenting-path
    DFS — for any valid 8-of-12 combination the matching is always complete. */
+/* FIFA WC2026 Annexe C: slot assignments keyed by the 8 qualifying-group letters sorted
+   and joined. One row per combination (495 total); add more as FIFA publishes the table.
+   Source: official WC2026 bracket — verified 2026-06-28. */
+const ANNEX_C={
+  'BDEFIJKL':{k01:'D',k04:'F',k07:'E',k08:'K',k09:'I',k10:'B',k13:'J',k16:'L'},
+};
 function assignThirdPlaceSlots(qualGroups){
-  /* qualGroups is sorted best-first (by the same Pts→GD→GF→FIFA-rank order used for
-     the overall 3rd-place ranking). Greedy first-fit: for each slot take the highest-
-     ranked qualifying group still available. This ensures e.g. the best 3rd from ABCDF
-     goes to k01 rather than being pulled away by augmenting-path optimisation. */
+  /* Exact Annex C lookup when all 8 qualifying groups are known */
+  const key=[...qualGroups].sort().join('');
+  if(ANNEX_C[key])return{...ANNEX_C[key]};
+  /* Fallback greedy (best-ranked group fills each slot first) for mid-tournament
+     projection when fewer than 8 groups have finished */
   const eligible={
-    k01:'ABCDF', k04:'CDFGH', k07:'CEFHI', k08:'EHIJK',
-    k09:'AEHIJ', k10:'BEFIJ', k13:'EFGIJ', k16:'DEIJL'
+    k01:'ABCDF',k04:'CDFGH',k07:'CEFHI',k08:'EHIJK',
+    k09:'AEHIJ',k10:'BEFIJ',k13:'EFGIJ',k16:'DEIJL'
   };
-  const s2g={};
-  const used=new Set();
+  const s2g={};const used=new Set();
   for(const[slot,eligStr]of Object.entries(eligible)){
     for(const g of qualGroups){
       if(eligStr.includes(g)&&!used.has(g)){s2g[slot]=g;used.add(g);break;}
