@@ -908,8 +908,11 @@ function renderLiveUpcoming(){
 function updateRail(){
   const order=['GS','R32','R16','QF','SF','F'];
   let cur='GS';
-  for(const s of order){const ms=allMatches().filter(m=>m.stage===s);if(ms.some(m=>{const r=state.results[m.id];return r&&r.status==='FT'}))cur=s;}
-  /* advance highlight to next stage if current fully done */
+  const now=Date.now();
+  for(const s of order){
+    const ms=allMatches().filter(m=>m.stage===s);
+    if(ms.some(m=>{const r=state.results[m.id];return (r&&(r.status==='FT'||r.status==='LIVE'))||m.ts<=now;}))cur=s;
+  }
   $$('#rail div').forEach(d=>d.classList.toggle('on',d.dataset.s===cur));
 }
 
@@ -2718,6 +2721,14 @@ function init(){
     $('#view-live').style.display=t.dataset.view==='live'?'':'none';
     $('#view-standings').style.display=t.dataset.view==='standings'?'':'none';
     if(t.dataset.view==='fixtures')requestAnimationFrame(scrollScheduleToToday);
+  }));
+  $$('#rail div').forEach(d=>d.addEventListener('click',()=>{
+    $('#fStage').value=d.dataset.s;
+    renderSchedule();
+    /* switch to Fixtures tab if not already there */
+    const ft=$$('#tabs .tab').find(t=>t.dataset.view==='fixtures');
+    if(ft&&$('#view-fixtures').style.display==='none')ft.click();
+    requestAnimationFrame(scrollScheduleToToday);
   }));
   ['fStage','fGroup','fDate'].forEach(i=>$('#'+i).addEventListener('change',renderSchedule));
   $('#fTeam').addEventListener('input',renderSchedule);
