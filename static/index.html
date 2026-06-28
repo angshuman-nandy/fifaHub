@@ -776,7 +776,7 @@ function allMatches(){
     return{id:slot,stage:m[1],d:i.date,t:i.time,iso:i.iso,ts:i.ts,rawD:m[2],g:null,
            h,a,hConf,aConf,hProj,aProj,v:VEN[m[4]],label:KO_LABEL[slot]||STAGE_NAME[m[1]]};
   });
-  return g.concat(k);
+  return g.concat(k).sort((a,b)=>a.ts-b.ts);
 }
 const teamName=c=>TEAMS[c]?TEAMS[c].n:(c||'TBD');
 const teamFlag=c=>TEAMS[c]?TEAMS[c].f:'⏳';
