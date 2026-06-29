@@ -685,13 +685,15 @@ const KO=[
 ['k31','F','Jul 18','5:00 PM','HRD'],['k32','F','Jul 19','3:00 PM','MET']];
 const KO_LABEL={k31:'Bronze Final',k32:'THE FINAL'};
 const STAGE_NAME={GS:'Group Stage',R32:'Round of 32',R16:'Round of 16',QF:'Quarterfinal',SF:'Semifinal',F:'Final'};
-/* Official WC26 bracket adjacency per FIFA §12.7 table.
-   R16 feeders (using official M-numbers): M89=W76+W78, M90=W74+W73, M91=W77+W75,
-   M92=W79+W80, M93=W84+W83, M94=W82+W81, M95=W88+W87, M96=W85+W86. */
+/* Official WC26 bracket adjacency — FIFA §12.7 table (verified from official regs doc).
+   R16: M89=W74+W77, M90=W73+W75, M91=W76+W78, M92=W79+W80,
+        M93=W83+W84, M94=W81+W82, M95=W86+W88, M96=W85+W87.
+   QF:  M97=W89+W90, M98=W93+W94, M99=W91+W92, M100=W95+W96.
+   SF:  M101=W97+W98, M102=W99+W100. Final=M104=W101+W102. */
 const BRACKET={
-  k17:['k02','k05'], k18:['k01','k03'], k19:['k04','k06'], k20:['k07','k08'],
-  k21:['k11','k12'], k22:['k09','k10'], k23:['k14','k16'], k24:['k13','k15'],
-  k25:['k18','k17'], k26:['k21','k22'], k27:['k19','k20'], k28:['k24','k23'],
+  k17:['k01','k04'], k18:['k03','k06'], k19:['k02','k05'], k20:['k07','k08'],
+  k21:['k12','k11'], k22:['k10','k09'], k23:['k15','k14'], k24:['k13','k16'],
+  k25:['k17','k18'], k26:['k21','k22'], k27:['k19','k20'], k28:['k23','k24'],
   k29:['k25','k26'], k30:['k27','k28'],
   k32:['k29','k30']
 };
@@ -1671,10 +1673,10 @@ const SLOT_NUM={
 const slotNum=slot=>SLOT_NUM[slot]||(72+parseInt(slot.replace('k','')));
 
 /* Display order so each node centres vertically between its two feeders:
-   k29←(k25←k18[k01,k03],k17[k02,k05] / k26←k21[k11,k12],k22[k09,k10])
-   k30←(k27←k19[k04,k06],k20[k07,k08] / k28←k24[k13,k15],k23[k14,k16]) */
-const R32_SLOTS=['k01','k03','k02','k05','k11','k12','k09','k10','k04','k06','k07','k08','k13','k15','k14','k16'];
-const R16_SLOTS=['k18','k17','k21','k22','k19','k20','k24','k23'];
+   k29←(k25←k17[k01,k04],k18[k03,k06] / k26←k21[k12,k11],k22[k10,k09])
+   k30←(k27←k19[k02,k05],k20[k07,k08] / k28←k23[k15,k14],k24[k13,k16]) */
+const R32_SLOTS=['k01','k04','k03','k06','k12','k11','k10','k09','k02','k05','k07','k08','k15','k14','k13','k16'];
+const R16_SLOTS=['k17','k18','k21','k22','k19','k20','k23','k24'];
 const QF_SLOTS=['k25','k26','k27','k28'];
 const SF_SLOTS=['k29','k30'];
 const F_SLOT='k32';
