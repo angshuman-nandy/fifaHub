@@ -1705,18 +1705,24 @@ function projectBracket(){
     if(kt){n=resolveNode(slot,'R16',kt.h,kt.a)}
     else{const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);n=resolveNode(slot,'R16',winnerOf(f0),winnerOf(f1))}
     const[lf0,lf1]=BRACKET[slot].map(s=>bySlot[s]);
+    n.aConfirmed=!!kt||(lf0?lf0.played:false);
+    n.bConfirmed=!!kt||(lf1?lf1.played:false);
     n.aLabel=`Winner #${slotNum(lf0.slot)}`;n.bLabel=`Winner #${slotNum(lf1.slot)}`;
     bySlot[slot]=n;return n;
   });
   const QF=QF_SLOTS.map(slot=>{
     const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);
     const n=resolveNode(slot,'QF',winnerOf(f0),winnerOf(f1));
+    n.aConfirmed=f0?f0.played:false;
+    n.bConfirmed=f1?f1.played:false;
     n.aLabel=`Winner #${slotNum(f0.slot)}`;n.bLabel=`Winner #${slotNum(f1.slot)}`;
     bySlot[slot]=n;return n;
   });
   const SF=SF_SLOTS.map(slot=>{
     const[f0,f1]=BRACKET[slot].map(s=>bySlot[s]);
     const n=resolveNode(slot,'SF',winnerOf(f0),winnerOf(f1));
+    n.aConfirmed=f0?f0.played:false;
+    n.bConfirmed=f1?f1.played:false;
     n.aLabel=`Winner #${slotNum(f0.slot)}`;n.bLabel=`Winner #${slotNum(f1.slot)}`;
     bySlot[slot]=n;return n;
   });
