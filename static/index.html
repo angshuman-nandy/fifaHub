@@ -1627,8 +1627,9 @@ function resolveNode(slot,stage,a,b){
   const real=state.results[slot],kt=state.koTeams[slot];
   const ktMatches=kt&&((kt.h===a&&kt.a===b)||(kt.h===b&&kt.a===a));
   if(real&&real.status==='FT'&&ktMatches){
-    /* hs/as are stored already normalized to kt.h/kt.a orientation (see pullFresh) */
-    const winner=real.hs===real.as?tp.winner:(real.hs>real.as?kt.h:kt.a); /* KO can't draw — tp.winner is a defensive fallback only */
+    /* hs/as normalized to kt.h/kt.a orientation. Penalty shootout: real.penWinner holds the
+       actual winner when scores are level after 90 min (ESPN note "X advance Y-Z on penalties") */
+    const winner=real.hs===real.as?(real.penWinner||tp.winner):(real.hs>real.as?kt.h:kt.a);
     return{slot,stage,a,b,winner,played:true,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:tp.winner===winner,llm:tp.llm};
   }
   return{slot,stage,a,b,winner:tp.winner,played:false,pa:tp.pH,pb:tp.pA,predWinner:tp.winner,correct:null,llm:tp.llm};
@@ -1812,7 +1813,8 @@ async function pullFresh(){
         }
       }
       if(!hit)continue;
-      state.results[hit.id]={hs:hit.flip?r.as:r.hs,as:hit.flip?r.hs:r.as,status:r.status==='LIVE'?'LIVE':'FT',scorers:Array.isArray(r.scorers)?r.scorers.slice(0,6):[]};
+      const penW=r.penWinner?toCode(r.penWinner,''):null;
+      state.results[hit.id]={hs:hit.flip?r.as:r.hs,as:hit.flip?r.hs:r.as,status:r.status==='LIVE'?'LIVE':'FT',scorers:Array.isArray(r.scorers)?r.scorers.slice(0,6):[],penWinner:penW||null,penScore:r.penScore||null};
       if(r.espnId){state.results[hit.id].espnId=r.espnId;state.espnIds[hit.id]=r.espnId}
       updated++;
     }
@@ -2098,7 +2100,9 @@ function brkRow(team,label,node){
   return`<div class="${cls}"><span class="bf">${teamFlag(team)}</span><div class="bnw"><span class="bn">${TEAMS[team].n}</span>${posHTML}</div>${badge}<span class="bp">${pct}</span></div>`;
 }
 function brkNode(node){
-  const num=`<div class="brkmatch">#${slotNum(node.slot)}</div>`;
+  const real=state.results[node.slot];
+  const penNote=real&&real.penScore?`<span style="font-size:9px;color:var(--muted);padding:1px 8px;display:block;text-align:right">(${real.penScore} on pens)</span>`:'';
+  const num=`<div class="brkmatch">#${slotNum(node.slot)}${penNote}</div>`;
   return`<div class="brknode${node.played?' played':''}">${num}${brkRow(node.a,node.aLabel,node)}${brkRow(node.b,node.bLabel,node)}</div>`;
 }
 function _loadScript(src){

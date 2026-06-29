@@ -399,6 +399,24 @@ def _normalize_scoreboard(data, include_upcoming=False):
             except (TypeError, ValueError):
                 return 0
 
+        # Penalty shootout: detect winner from ESPN notes headline
+        # e.g. "Paraguay advance 4-3 on penalties"
+        pen_winner = None
+        pen_score = None
+        for note_obj in notes:
+            hl = note_obj.get("headline", "")
+            hll = hl.lower()
+            if "penalt" in hll:
+                import re as _re
+                for abbr, dispname in [(home_abbr, ht.get("displayName", "")),
+                                       (away_abbr, at.get("displayName", ""))]:
+                    if dispname.lower() in hll or (abbr and abbr.lower() in hll):
+                        pen_winner = abbr
+                        m = _re.search(r'(\d+)[–\-](\d+)', hl)
+                        if m:
+                            pen_score = f"{m.group(1)}-{m.group(2)}"
+                        break
+
         scorers, goals = [], []
         for d in comp.get("details") or []:
             if not d.get("scoringPlay"):
@@ -442,6 +460,8 @@ def _normalize_scoreboard(data, include_upcoming=False):
             "espnId": str(ev.get("id") or ""),
             "date": date,
             "venue": venue,
+            "penWinner": pen_winner,
+            "penScore": pen_score,
         })
     return matches
 
