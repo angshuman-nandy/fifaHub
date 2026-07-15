@@ -743,7 +743,9 @@ async def standings(dates: str = DEFAULT_DATES, upcoming: bool = False):
     matches, source = None, None
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.get(f"{ESPN_BASE}/scoreboard?dates={dates}")
+            # limit=400: ESPN defaults to 100 events per response — the tournament has
+            # 104 matches, so without it the newest matches (SF onward) get cut off
+            r = await client.get(f"{ESPN_BASE}/scoreboard?dates={dates}&limit=400")
         r.raise_for_status()
         matches, source = _normalize_scoreboard(r.json(), include_upcoming=upcoming), "espn"
     except Exception:
