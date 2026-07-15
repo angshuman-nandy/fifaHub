@@ -767,6 +767,7 @@ function allMatches(){
   const bkt=projectBracket();
   const bySlot={};
   for(const nodes of Object.values(bkt.rounds))for(const n of nodes)bySlot[n.slot]=n;
+  if(bkt.bronze)bySlot[bkt.bronze.slot]=bkt.bronze;
   const k=KO.map(m=>{
     const slot=m[0];const kt=state.koTeams[slot]||{};const node=bySlot[slot];const i=fmtIST(m[2],m[3]);
     const h=kt.h||(node?node.a:null);
@@ -1731,8 +1732,17 @@ function projectBracket(){
   });
   const[f0,f1]=BRACKET[F_SLOT].map(s=>bySlot[s]);
   const F=[resolveNode(F_SLOT,'F',winnerOf(f0),winnerOf(f1))];
+  F[0].aConfirmed=!!state.koTeams[F_SLOT]||(f0?f0.played:false);
+  F[0].bConfirmed=!!state.koTeams[F_SLOT]||(f1?f1.played:false);
   F[0].aLabel=`Winner #${slotNum(f0.slot)}`;F[0].bLabel=`Winner #${slotNum(f1.slot)}`;
-  return{rounds:{R32,R16,QF,SF,F},champ:F[0].winner};
+  /* Bronze final (k31): the SF losers. Not a bracket column — returned separately so
+     the fixtures/upcoming lists can show its teams instead of TBD once the semis end. */
+  const loserOf=n=>n&&n.a&&n.b&&n.winner?(n.winner===n.a?n.b:n.a):null;
+  const bronze=resolveNode('k31','F',loserOf(f0),loserOf(f1));
+  bronze.aConfirmed=!!state.koTeams.k31||(f0?f0.played:false);
+  bronze.bConfirmed=!!state.koTeams.k31||(f1?f1.played:false);
+  bronze.aLabel=`Loser #${slotNum(f0.slot)}`;bronze.bLabel=`Loser #${slotNum(f1.slot)}`;
+  return{rounds:{R32,R16,QF,SF,F},bronze,champ:F[0].winner};
 }
 /* refreshBracketPreds: the ONLY place genKoPred is enqueued. Called from pullFresh after
    results are bound, never from a render. Walks the freshly-projected bracket and queues
@@ -1772,6 +1782,9 @@ async function ensureEspnIds(force){
           const slots=KO.filter(k=>k[1]===stage).map(k=>k[0]);
           let slot=slots.find(id=>{const kt=state.koTeams[id];return kt&&((kt.h===home&&kt.a===away)||(kt.h===away&&kt.a===home))});
           if(!slot){const byDate=findKoSlotByDate(stage,r.date);if(byDate&&state.koTeams[byDate])slot=byDate;}
+          /* bronze/final are unique slots — bind directly even before koTeams is set,
+             so Squad & Formations works for them as upcoming matches */
+          if(r.stage==='BRONZE')slot='k31';if(r.stage==='F')slot='k32';
           if(slot)hit={id:slot};
         }
         if(hit&&state.espnIds[hit.id]!==r.espnId){state.espnIds[hit.id]=r.espnId;changed=true}
